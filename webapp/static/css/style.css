@@ -1,0 +1,73 @@
+/* 自訂樣式 */
+
+body {
+    background-color: #f8f9fa;
+}
+
+.navbar-brand {
+    font-weight: bold;
+}
+
+.card {
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+    border: none;
+    margin-bottom: 1.5rem;
+}
+
+.card-header {
+    background-color: #fff;
+    border-bottom: 1px solid #dee2e6;
+    font-weight: 600;
+}
+
+.table {
+    margin-bottom: 0;
+}
+
+.badge {
+    font-weight: 500;
+}
+
+.progress {
+    border-radius: 0.25rem;
+}
+
+.btn-group-sm > .btn {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.875rem;
+}
+
+/* 統計卡片 */
+.card.text-white .card-title {
+    font-size: 0.9rem;
+    font-weight: 500;
+    opacity: 0.9;
+}
+
+.card.text-white h2 {
+    font-size: 2.5rem;
+    font-weight: 300;
+}
+
+/* 載入動畫 */
+.spinner-border {
+    vertical-align: middle;
+}
+
+/* 響應式調整 */
+@media (max-width: 768px) {
+    .card.text-white h2 {
+        font-size: 2rem;
+    }
+
+    .table {
+        font-size: 0.875rem;
+    }
+}
+
+/* 自訂顏色 */
+.text-primary { color: #007bff !important; }
+.text-success { color: #28a745 !important; }
+.text-warning { color: #ffc107 !important; }
+.text-danger { color: #dc3545 !important; }
+.text-info { color: #17a2b8 !important; }

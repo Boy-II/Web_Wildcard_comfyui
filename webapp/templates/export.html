@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+
+{% block title %}匯出資料 - Wildcard 管理系統{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="mb-4">
+            <i class="bi bi-download"></i> 匯出資料
+        </h1>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">匯出設定</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label for="export-category" class="form-label">選擇類別</label>
+                    <select class="form-select" id="export-category">
+                        <option value="">所有類別</option>
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label for="export-filename" class="form-label">自訂檔名（選填）</label>
+                    <input type="text" class="form-control" id="export-filename" placeholder="留空使用預設檔名">
+                    <small class="text-muted">不需要加副檔名，系統會自動添加</small>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">匯出格式</label>
+                    <div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="format" id="format-txt" value="txt" checked>
+                            <label class="form-check-label" for="format-txt">
+                                TXT 文字檔
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="format" id="format-json" value="json">
+                            <label class="form-check-label" for="format-json">
+                                JSON 格式
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="format" id="format-csv" value="csv">
+                            <label class="form-check-label" for="format-csv">
+                                CSV 試算表
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <button class="btn btn-success" onclick="exportData()">
+                    <i class="bi bi-download"></i> 匯出
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-info-circle"></i> 說明
+                </h5>
+            </div>
+            <div class="card-body">
+                <p>選擇您要匯出的類別和格式，系統將產生對應的檔案供您下載。</p>
+                <p class="small text-muted">
+                    <strong>提示：</strong> 匯出時只會包含啟用狀態的 wildcard。
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+async function loadCategories() {
+    try {
+        const response = await fetch('/api/categories');
+        const categories = await response.json();
+
+        const select = document.getElementById('export-category');
+        categories.forEach(cat => {
+            const option = document.createElement('option');
+            option.value = cat.id;
+            option.textContent = cat.display_name;
+            select.appendChild(option);
+        });
+    } catch (error) {
+        console.error('載入類別失敗:', error);
+    }
+}
+
+function exportData() {
+    const category = document.getElementById('export-category').value;
+    const format = document.querySelector('input[name="format"]:checked').value;
+    const filename = document.getElementById('export-filename').value.trim();
+
+    let url = `/api/export/${format}`;
+    const params = new URLSearchParams();
+
+    if (category) {
+        params.append('category_id', category);
+    }
+    if (filename) {
+        params.append('filename', filename);
+    }
+
+    if (params.toString()) {
+        url += '?' + params.toString();
+    }
+
+    window.location.href = url;
+}
+
+document.addEventListener('DOMContentLoaded', loadCategories);
+</script>
+{% endblock %}

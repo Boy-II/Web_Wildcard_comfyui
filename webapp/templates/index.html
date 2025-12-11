@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+
+{% block title %}首頁 - Wildcard 管理系統{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="mb-4">
+            <i class="bi bi-stars"></i> Wildcard 管理系統
+        </h1>
+    </div>
+</div>
+
+<div class="row mb-4" id="stats-cards">
+    <div class="col-md-3">
+        <div class="card text-white bg-primary">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <i class="bi bi-collection"></i> 總 Wildcard 數
+                </h5>
+                <h2 class="mb-0" id="total-wildcards">-</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-success">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <i class="bi bi-check-circle"></i> 啟用中
+                </h5>
+                <h2 class="mb-0" id="active-wildcards">-</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-warning">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <i class="bi bi-pause-circle"></i> 停用中
+                </h5>
+                <h2 class="mb-0" id="inactive-wildcards">-</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-info">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <i class="bi bi-folder"></i> 類別數
+                </h5>
+                <h2 class="mb-0" id="total-categories">-</h2>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-bar-chart"></i> 各類別統計
+                </h5>
+            </div>
+            <div class="card-body">
+                <div id="category-stats">
+                    <p class="text-muted">載入中...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-info-circle"></i> 快速開始
+                </h5>
+            </div>
+            <div class="card-body">
+                <ol>
+                    <li class="mb-2">
+                        前往 <a href="/import">匯入資料</a> 頁面，匯入您的 wildcard 檔案
+                    </li>
+                    <li class="mb-2">
+                        在 <a href="/categories">類別管理</a> 中管理和自訂類別
+                    </li>
+                    <li class="mb-2">
+                        到 <a href="/wildcards">Wildcard 列表</a> 瀏覽、編輯和管理您的資料
+                    </li>
+                    <li class="mb-2">
+                        使用 <a href="/export">匯出資料</a> 功能導出整理好的資料
+                    </li>
+                </ol>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-gear"></i> 系統功能
+                </h5>
+            </div>
+            <div class="card-body">
+                <ul class="list-unstyled">
+                    <li class="mb-2">
+                        <i class="bi bi-check-circle text-success"></i>
+                        自動合併重複的 wildcard
+                    </li>
+                    <li class="mb-2">
+                        <i class="bi bi-check-circle text-success"></i>
+                        智慧分類（依檔名自動分類）
+                    </li>
+                    <li class="mb-2">
+                        <i class="bi bi-check-circle text-success"></i>
+                        支援 ZIP 和 TXT 檔案匯入
+                    </li>
+                    <li class="mb-2">
+                        <i class="bi bi-check-circle text-success"></i>
+                        PostgreSQL 資料庫儲存
+                    </li>
+                    <li class="mb-2">
+                        <i class="bi bi-check-circle text-success"></i>
+                        可設定權重和標籤
+                    </li>
+                    <li class="mb-2">
+                        <i class="bi bi-check-circle text-success"></i>
+                        多格式匯出（TXT, JSON, CSV）
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+async function loadStats() {
+    try {
+        const response = await fetch('/api/stats');
+        const data = await response.json();
+
+        document.getElementById('total-wildcards').textContent = data.total_wildcards.toLocaleString();
+        document.getElementById('active-wildcards').textContent = data.active_wildcards.toLocaleString();
+        document.getElementById('inactive-wildcards').textContent = data.inactive_wildcards.toLocaleString();
+        document.getElementById('total-categories').textContent = data.total_categories.toLocaleString();
+
+        // 顯示類別統計
+        const categoryStatsDiv = document.getElementById('category-stats');
+        categoryStatsDiv.innerHTML = '';
+
+        if (data.category_stats.length === 0) {
+            categoryStatsDiv.innerHTML = '<p class="text-muted">尚無資料</p>';
+            return;
+        }
+
+        data.category_stats.forEach(cat => {
+            const percentage = data.total_wildcards > 0
+                ? (cat.count / data.total_wildcards * 100).toFixed(1)
+                : 0;
+
+            const html = `
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between mb-1">
+                        <span>
+                            <span class="badge" style="background-color: ${cat.color}">${cat.display_name}</span>
+                        </span>
+                        <span>${cat.count.toLocaleString()} (${percentage}%)</span>
+                    </div>
+                    <div class="progress" style="height: 20px;">
+                        <div class="progress-bar" role="progressbar"
+                             style="width: ${percentage}%; background-color: ${cat.color}"
+                             aria-valuenow="${percentage}" aria-valuemin="0" aria-valuemax="100">
+                        </div>
+                    </div>
+                </div>
+            `;
+            categoryStatsDiv.innerHTML += html;
+        });
+    } catch (error) {
+        console.error('載入統計資料失敗:', error);
+    }
+}
+
+// 頁面載入時執行
+document.addEventListener('DOMContentLoaded', loadStats);
+</script>
+{% endblock %}

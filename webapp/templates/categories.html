@@ -1,0 +1,373 @@
+{% extends "base.html" %}
+
+{% block title %}類別管理 - Wildcard 管理系統{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="mb-4">
+            <i class="bi bi-folder"></i> 類別管理
+            <button class="btn btn-primary float-end" onclick="showAddModal()">
+                <i class="bi bi-plus-circle"></i> 新增類別
+            </button>
+        </h1>
+    </div>
+</div>
+
+<div class="row" id="categories-grid">
+    <div class="col-12">
+        <p class="text-muted">載入中...</p>
+    </div>
+</div>
+
+<!-- 新增/編輯類別對話框 -->
+<div class="modal fade" id="categoryModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalTitle">新增類別</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="categoryForm">
+                    <input type="hidden" id="categoryId">
+                    <div class="mb-3">
+                        <label for="categoryName" class="form-label">系統名稱 *</label>
+                        <input type="text" class="form-control" id="categoryName" required
+                               placeholder="例如：anime_artists（英文、數字、底線）">
+                        <small class="text-muted">只能使用英文、數字和底線</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="categoryDisplayName" class="form-label">顯示名稱 *</label>
+                        <input type="text" class="form-control" id="categoryDisplayName" required
+                               placeholder="例如：動漫藝術家">
+                    </div>
+                    <div class="mb-3">
+                        <label for="categoryDescription" class="form-label">描述</label>
+                        <textarea class="form-control" id="categoryDescription" rows="2"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label for="categoryParent" class="form-label">父類別</label>
+                        <select id="categoryParent" class="form-select"></select>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <label for="categoryColor" class="form-label">顏色</label>
+                            <input type="color" class="form-control form-control-color" id="categoryColor" value="#6c757d">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="categorySortOrder" class="form-label">排序</label>
+                            <input type="number" class="form-control" id="categorySortOrder" value="0">
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="saveCategory()">儲存</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let categoryModal;
+let isEditMode = false;
+let categoryTree = []; // 用於儲存樹狀結構
+let flatCategories = []; // 用於儲存扁平化後的列表，方便查找
+
+document.addEventListener('DOMContentLoaded', () => {
+    categoryModal = new bootstrap.Modal(document.getElementById('categoryModal'));
+    loadCategories();
+});
+
+function flattenCategories(categories, destination) {
+    for (const cat of categories) {
+        destination.push(cat);
+        if (cat.children) {
+            flattenCategories(cat.children, destination);
+        }
+    }
+}
+
+async function loadCategories() {
+    try {
+        const response = await fetch('/api/categories?tree=true'); // 獲取樹狀結構
+        categoryTree = await response.json();
+        
+        // 建立一個扁平化列表供 Modal 使用
+        flatCategories = [];
+        flattenCategories(categoryTree, flatCategories);
+        // 排序扁平列表以供下拉選單使用
+        flatCategories.sort((a, b) => a.full_path.localeCompare(b.full_path));
+
+        // 根據 sort_order 和名稱排序根分類
+        categoryTree.sort((a, b) => {
+            if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
+            return a.display_name.localeCompare(b.display_name);
+        });
+
+        const grid = document.getElementById('categories-grid');
+        grid.innerHTML = '';
+
+        if (categoryTree.length === 0) {
+            grid.innerHTML = '<div class="col-12"><p class="text-muted">尚無類別</p></div>';
+            return;
+        }
+        
+        categoryTree.forEach(cat => {
+            grid.innerHTML += buildCategoryCard(cat);
+        });
+
+    } catch (error) {
+        console.error('載入類別失敗:', error);
+        document.getElementById('categories-grid').innerHTML =
+            '<div class="col-12"><p class="text-danger">載入失敗，請重試</p></div>';
+    }
+}
+
+function buildCategoryCard(cat) {
+    const hasChildren = cat.children && cat.children.length > 0;
+    const collapseId = `collapse-${cat.id}`;
+    
+    // 遞迴建立子類別的 HTML
+    const childrenHtml = hasChildren ? buildSubCategoryHTML(cat.children) : '';
+
+    return `
+        <div class="col-md-4 mb-3">
+            <div class="card">
+                <div class="card-header" style="background-color: ${cat.color}; color: white;">
+                    <h5 class="mb-0 d-flex justify-content-between align-items-center">
+                        <span>
+                            ${hasChildren ? `
+                                <a class="btn btn-sm btn-light py-0 px-1 me-2" data-bs-toggle="collapse" href="#${collapseId}" role="button">
+                                    <i class="bi bi-diagram-3"></i>
+                                </a>
+                            ` : ''}
+                            ${cat.display_name}
+                        </span>
+                        <span class="badge bg-light text-dark">${cat.total_wildcard_count} items</span>
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small">${cat.description || '無描述'}</p>
+                    <hr>
+                    <p class="mb-3 small">
+                        <strong>系統名稱:</strong> ${cat.name}<br>
+                        <strong>完整路徑:</strong> ${cat.full_path || cat.name}
+                    </p>
+                    <div class="btn-group btn-group-sm w-100 mb-3">
+                        <button class="btn btn-outline-primary" onclick="showEditModal(${cat.id})">
+                            <i class="bi bi-pencil"></i> 編輯
+                        </button>
+                        <a href="/wildcards?category_id=${cat.id}" class="btn btn-outline-info">
+                            <i class="bi bi-list-ul"></i> 查看內容
+                        </a>
+                        <button class="btn btn-outline-danger" onclick="deleteCategory(${cat.id}, '${cat.display_name}')">
+                            <i class="bi bi-trash"></i> 刪除
+                        </button>
+                    </div>
+
+                    ${hasChildren ? `
+                        <div class="collapse" id="${collapseId}">
+                            ${childrenHtml}
+                        </div>
+                    ` : ''}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function buildSubCategoryHTML(children) {
+    if (!children || children.length === 0) return '';
+
+    let html = '<ul class="list-group list-group-flush">';
+
+    // 排序子類別
+    children.sort((a, b) => {
+        if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
+        return a.display_name.localeCompare(b.display_name);
+    });
+
+    children.forEach(child => {
+        const hasGrandchildren = child.children && child.children.length > 0;
+        const collapseId = `collapse-${child.id}`;
+        const grandchildrenHtml = hasGrandchildren ? buildSubCategoryHTML(child.children) : '';
+
+        html += `
+            <li class="list-group-item">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div style="color:${child.color};">
+                        ${hasGrandchildren ? `
+                            <a class="btn btn-sm py-0 px-1 me-1" data-bs-toggle="collapse" href="#${collapseId}" role="button">
+                                <i class="bi bi-chevron-down"></i>
+                            </a>
+                        ` : `
+                            <i class="bi bi-dot me-1"></i>
+                        `}
+                        ${child.display_name}
+                        <small class="text-muted">(${child.name})</small>
+                    </div>
+                    <div class="btn-group btn-group-sm">
+                        <button class="btn btn-outline-primary py-0 px-1" onclick="showEditModal(${child.id})"><i class="bi bi-pencil"></i></button>
+                        <a href="/wildcards?category_id=${child.id}" class="btn btn-outline-info py-0 px-1"><i class="bi bi-list-ul"></i></a>
+                        <button class="btn btn-outline-danger py-0 px-1" onclick="deleteCategory(${child.id}, '${child.display_name}')"><i class="bi bi-trash"></i></button>
+                    </div>
+                </div>
+                ${hasGrandchildren ? `
+                    <div class="collapse" id="${collapseId}">
+                        <div class="mt-2" style="padding-left: 1.5rem;">
+                            ${grandchildrenHtml}
+                        </div>
+                    </div>
+                ` : ''}
+            </li>
+        `;
+    });
+
+    html += '</ul>';
+    return html;
+}
+
+function loadParentCategoryDropdown(excludeCategoryId = null) {
+    const parentSelect = document.getElementById('categoryParent');
+    parentSelect.innerHTML = '<option value="">無 (設為根類別)</option>';
+
+    let categoryToExclude = null;
+    let basePathToExclude = null;
+
+    if (excludeCategoryId) {
+        categoryToExclude = flatCategories.find(c => c.id === excludeCategoryId);
+        if (categoryToExclude) {
+            basePathToExclude = categoryToExclude.full_path + ' > ';
+        }
+    }
+    
+    flatCategories.forEach(cat => {
+        // 排除自己和所有子孫
+        if (categoryToExclude) {
+            if (cat.id === categoryToExclude.id || cat.full_path.startsWith(basePathToExclude)) {
+                return;
+            }
+        }
+        const option = new Option(cat.full_path, cat.id);
+        parentSelect.appendChild(option);
+    });
+}
+
+
+async function showAddModal() {
+    isEditMode = false;
+    document.getElementById('modalTitle').textContent = '新增類別';
+    document.getElementById('categoryForm').reset();
+    document.getElementById('categoryId').value = '';
+    document.getElementById('categoryName').disabled = false;
+    document.getElementById('categoryColor').value = '#6c757d';
+    document.getElementById('categorySortOrder').value = '0';
+    loadParentCategoryDropdown();
+    categoryModal.show();
+}
+
+async function showEditModal(id) {
+    isEditMode = true;
+    document.getElementById('modalTitle').textContent = '編輯類別';
+    
+    const category = flatCategories.find(c => c.id === id);
+    if (!category) {
+         alert('找不到類別資料');
+         return;
+    }
+
+    loadParentCategoryDropdown(id);
+
+    document.getElementById('categoryId').value = category.id;
+    document.getElementById('categoryName').value = category.name;
+    document.getElementById('categoryName').disabled = true;
+    document.getElementById('categoryDisplayName').value = category.display_name;
+    document.getElementById('categoryDescription').value = category.description || '';
+    document.getElementById('categoryColor').value = category.color || '#6c757d';
+    document.getElementById('categorySortOrder').value = category.sort_order;
+    document.getElementById('categoryParent').value = category.parent_id || '';
+    
+    categoryModal.show();
+}
+
+
+async function saveCategory() {
+    const id = document.getElementById('categoryId').value;
+    const name = document.getElementById('categoryName').value.trim();
+    const displayName = document.getElementById('categoryDisplayName').value.trim();
+    const parentId = document.getElementById('categoryParent').value;
+
+    if (!name || !displayName) {
+        alert('請填寫系統名稱和顯示名稱');
+        return;
+    }
+
+    if (!isEditMode && !/^[a-zA-Z0-9_]+$/.test(name)) {
+        alert('系統名稱只能包含英文字母、數字和底線');
+        return;
+    }
+
+    const data = {
+        name: name,
+        display_name: displayName,
+        description: document.getElementById('categoryDescription').value.trim(),
+        color: document.getElementById('categoryColor').value,
+        sort_order: parseInt(document.getElementById('categorySortOrder').value) || 0,
+        parent_id: parentId ? parseInt(parentId) : null
+    };
+
+    const url = isEditMode ? `/api/categories/${id}` : '/api/categories';
+    const method = isEditMode ? 'PUT' : 'POST';
+
+    try {
+        const response = await fetch(url, {
+            method: method,
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+
+        if (response.ok) {
+            categoryModal.hide();
+            await loadCategories(); // 重新載入所有類別
+        } else {
+            const result = await response.json();
+            alert('儲存失敗: ' + (result.error || '未知錯誤'));
+        }
+    } catch (error) {
+        alert('儲存操作失敗: ' + error.message);
+    }
+}
+
+async function deleteCategory(id, name) {
+    if (!confirm(`確定要刪除類別「${name}」嗎？\n\n⚠️ 警告：此操作將會：\n• 刪除該類別下的所有 wildcard\n• 刪除所有子類別及其 wildcard\n• 從 ComfyUI 檔案中移除相關內容\n\n此操作無法復原！`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/categories/${id}`, {
+            method: 'DELETE'
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            const message = `類別「${name}」已刪除\n` +
+                          `• 刪除了 ${result.deleted_wildcards} 個 wildcard\n` +
+                          `• 刪除了 ${result.deleted_children} 個子類別`;
+            alert(message);
+            await loadCategories();
+        } else {
+            const result = await response.json();
+            alert('刪除失敗: ' + (result.error || '未知錯誤'));
+        }
+    } catch (error) {
+        alert('刪除操作失敗: ' + error.message);
+    }
+}
+</script>
+{% endblock %}
+

@@ -1,0 +1,70 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Flask
+instance/
+.webassets-cache
+
+# 資料庫
+*.db
+*.sqlite
+*.sqlite3
+data/*.db
+
+# 日誌
+logs/*.log
+*.log
+
+# 環境變數
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.override.yml
+
+# 数据文件（不上传）
+wildcards_for_translation.jsonl
+*.jsonl
+
+# 测试文件（不上传）
+test_*.py
+test_*.txt
+
+# 示例文件目录（不上传）
+sample file/
+
+# Claude 配置
+.claude/

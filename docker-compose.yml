@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: wildcard_db
+    environment:
+      POSTGRES_DB: wildcard_db
+      POSTGRES_USER: wildcard_user
+      POSTGRES_PASSWORD: wildcard_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wildcard_user -d wildcard_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 使用 Windows 原生 Ollama (更快、全 GPU 加載)
+  # 請在 Windows PowerShell 中執行：
+  # $env:OLLAMA_HOST = "0.0.0.0"
+  # ollama serve
+
+  web:
+    build: .
+    container_name: wildcard_web
+    ports:
+      - "9000:5000"
+    volumes:
+      - ./app.py:/app/app.py
+      - ./webapp:/app/webapp
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./sample file:/app/sample_file
+      - ./ollama_helper.py:/app/ollama_helper.py
+      - ./gemini_helper.py:/app/gemini_helper.py
+      - ./pollinations_helper.py:/app/pollinations_helper.py
+      - ./auto_categorizer.py:/app/auto_categorizer.py
+      - ./init_categories.py:/app/init_categories.py
+      - ./bulk_import.py:/app/bulk_import.py
+      - D:/ComfyUI-aki-v1.6/ComfyUI\custom_nodes/comfyui-adaptiveprompts/wildcards:/app/comfy_wildcard
+    environment:
+      - FLASK_APP=app.py
+      - FLASK_ENV=development
+      - DATABASE_URL=postgresql://wildcard_user:wildcard_pass@db:5432/wildcard_db
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - OLLAMA_MODEL=qwen3:8b
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    command: python app.py
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  postgres_data:

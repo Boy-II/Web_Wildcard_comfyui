@@ -1,0 +1,375 @@
+{% extends "base.html" %}
+
+{% block title %}ComfyUI Wildcard 目錄監視 - Wildcard 管理系統{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="mb-4">
+            <i class="bi bi-folder-fill"></i> ComfyUI Wildcard 目錄監視
+            <button class="btn btn-primary float-end me-2" onclick="scanDirectory()">
+                <i class="bi bi-arrow-repeat"></i> 重新掃描
+            </button>
+            <button class="btn btn-success float-end me-2" onclick="syncToDatabase(false)">
+                <i class="bi bi-cloud-upload"></i> 同步到資料庫
+            </button>
+        </h1>
+    </div>
+</div>
+
+<!-- 統計資訊 -->
+<div class="row mb-4" id="stats-cards">
+    <div class="col-md-3">
+        <div class="card text-white bg-primary">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <i class="bi bi-file-text"></i> TXT 檔案總數
+                </h5>
+                <h2 class="mb-0" id="total-files">-</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-success">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <i class="bi bi-list-ol"></i> 總行數
+                </h5>
+                <h2 class="mb-0" id="total-lines">-</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-info">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <i class="bi bi-folder"></i> 目錄數
+                </h5>
+                <h2 class="mb-0" id="total-dirs">-</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-warning">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <i class="bi bi-clock"></i> 最後掃描
+                </h5>
+                <h6 class="mb-0" id="scan-time" style="font-size: 0.9rem;">-</h6>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ComfyUI Wildcard 目錄設定 -->
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-gear-fill"></i> ComfyUI Wildcard 目錄設定</h5>
+    </div>
+    <div class="card-body">
+        <div class="input-group">
+            <span class="input-group-text"><i class="bi bi-folder-fill"></i></span>
+            <input type="text" id="comfyWildcardPath" class="form-control" placeholder="輸入 ComfyUI Wildcard 目錄路徑">
+            <button class="btn btn-primary" type="button" id="saveComfyPathBtn"><i class="bi bi-save"></i> 儲存路徑</button>
+        </div>
+        <div class="form-text mt-2">
+            這是 Wildcard 檔案所在的目錄。更新後，請重新掃描。
+            <span id="openPathLink" style="display:none; margin-left: 10px;">
+                <a href="#" target="_blank" class="text-dark">
+                    <i class="bi bi-box-arrow-up-right"></i> 開啟資料夾
+                </a>
+            </span>
+        </div>
+    </div>
+</div>
+
+<!-- 目錄樹 -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-diagram-3"></i> 目錄結構
+                </h5>
+            </div>
+            <div class="card-body">
+                <div id="directory-tree">
+                    <p class="text-muted">點擊「重新掃描」載入目錄結構...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 同步對話框 -->
+<div class="modal fade" id="syncModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">同步到資料庫</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="sync-progress">
+                    <p>正在同步檔案到資料庫...</p>
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+                <div id="sync-result" style="display: none;">
+                    <p><strong>匯入成功:</strong> <span id="sync-imported">0</span></p>
+                    <p><strong>跳過重複:</strong> <span id="sync-skipped">0</span></p>
+                    <p><strong>錯誤:</strong> <span id="sync-errors">0</span></p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let treeData = null;
+let syncModal;
+
+document.addEventListener('DOMContentLoaded', () => {
+    syncModal = new bootstrap.Modal(document.getElementById('syncModal'));
+    loadComfyPath(); // 載入 ComfyUI 路徑
+    document.getElementById('saveComfyPathBtn').addEventListener('click', saveComfyPath); // 綁定儲存按鈕事件
+    scanDirectory(); // 初始掃描目錄
+});
+
+async function loadComfyPath() {
+    try {
+        const response = await fetch('/api/settings/comfy-path');
+        const result = await response.json();
+        if (response.ok) {
+            document.getElementById('comfyWildcardPath').value = result.path;
+            const openLink = document.getElementById('openPathLink');
+            if (result.path) {
+                openLink.querySelector('a').href = `file:///${result.path}`;
+                openLink.style.display = 'inline';
+            } else {
+                openLink.style.display = 'none';
+            }
+        } else {
+            alert('載入 ComfyUI 路徑失敗: ' + (result.error || '未知錯誤'));
+        }
+    } catch (error) {
+        alert('載入 ComfyUI 路徑失敗: ' + error.message);
+    }
+}
+
+async function saveComfyPath() {
+    const newPath = document.getElementById('comfyWildcardPath').value.trim();
+    if (!newPath) {
+        alert('路徑不能為空');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/settings/comfy-path', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: newPath })
+        });
+        const result = await response.json();
+        if (response.ok) {
+            alert('ComfyUI 監控路徑已更新！');
+            // 更新開啟資料夾連結
+            const openLink = document.getElementById('openPathLink');
+            openLink.querySelector('a').href = `file:///${newPath}`;
+            openLink.style.display = 'inline';
+            scanDirectory(); // 重新掃描以反映新路徑
+        } else {
+            alert('更新 ComfyUI 路徑失敗: ' + (result.error || '未知錯誤'));
+        }
+    } catch (error) {
+        alert('更新 ComfyUI 路徑失敗: ' + error.message);
+    }
+}
+
+
+async function scanDirectory() {
+    try {
+        const response = await fetch('/api/comfy-wildcard/scan');
+        const result = await response.json();
+
+        if (result.success) {
+            treeData = result.data;
+
+            // 更新統計
+            document.getElementById('total-files').textContent = result.summary.total_files.toLocaleString();
+            document.getElementById('total-lines').textContent = result.summary.total_lines.toLocaleString();
+            document.getElementById('total-dirs').textContent = countDirectories(result.data);
+            document.getElementById('scan-time').textContent = new Date(result.summary.scan_time).toLocaleString('zh-TW');
+
+            // 渲染目錄樹
+            renderTree(result.data);
+        } else {
+            alert('掃描失敗: ' + (result.error || '未知錯誤'));
+        }
+    } catch (error) {
+        alert('掃描失敗: ' + error.message);
+    }
+}
+
+function countDirectories(node) {
+    if (node.type !== 'directory') return 0;
+
+    let count = 1;
+    if (node.children) {
+        node.children.forEach(child => {
+            if (child.type === 'directory') {
+                count += countDirectories(child);
+            }
+        });
+    }
+    return count;
+}
+
+function renderTree(data) {
+    const container = document.getElementById('directory-tree');
+    container.innerHTML = '';
+
+    const tree = buildTreeHTML(data, 0);
+    container.innerHTML = tree;
+}
+
+function buildTreeHTML(node, level) {
+    const indent = level * 20;
+    let html = '';
+
+    if (node.type === 'directory') {
+        const hasChildren = node.children && node.children.length > 0;
+        const uniqueId = `node-${Math.random().toString(36).substr(2, 9)}`;
+
+        html += `
+            <div class="tree-node directory-node" style="margin-left: ${indent}px;">
+                <div class="tree-item p-2 mb-1" style="background-color: #f8f9fa; border-left: 3px solid #0d6efd;">
+                    ${hasChildren ? `
+                        <i class="bi bi-chevron-down toggle-icon" onclick="toggleNode('${uniqueId}')" style="cursor: pointer;"></i>
+                    ` : '<i class="bi bi-circle" style="font-size: 0.5rem; margin-right: 8px;"></i>'}
+                    <i class="bi bi-folder-fill text-warning"></i>
+                    <strong>${node.name}</strong>
+                    <span class="badge bg-primary ms-2">${node.file_count} 檔案</span>
+                    <span class="badge bg-success ms-1">${node.total_lines.toLocaleString()} 行</span>
+                </div>
+                ${hasChildren ? `<div id="${uniqueId}" class="tree-children">` : ''}
+        `;
+
+        if (hasChildren) {
+            node.children.forEach(child => {
+                html += buildTreeHTML(child, level + 1);
+            });
+            html += '</div>';
+        }
+
+        html += '</div>';
+
+    } else if (node.type === 'file') {
+        const sizeKB = (node.size / 1024).toFixed(1);
+        const modified = new Date(node.modified).toLocaleDateString('zh-TW');
+
+        html += `
+            <div class="tree-node file-node" style="margin-left: ${indent}px;">
+                <div class="tree-item p-2 mb-1" style="border-left: 2px solid #dee2e6;">
+                    <i class="bi bi-file-text text-secondary"></i>
+                    <span>${node.name}</span>
+                    <span class="badge bg-secondary ms-2">${node.lines} 行</span>
+                    <small class="text-muted ms-2">${sizeKB} KB</small>
+                    <small class="text-muted ms-2">${modified}</small>
+                </div>
+            </div>
+        `;
+    }
+
+    return html;
+}
+
+function toggleNode(nodeId) {
+    const node = document.getElementById(nodeId);
+    const icon = event.target;
+
+    if (node.style.display === 'none') {
+        node.style.display = 'block';
+        icon.classList.remove('bi-chevron-right');
+        icon.classList.add('bi-chevron-down');
+    } else {
+        node.style.display = 'none';
+        icon.classList.remove('bi-chevron-down');
+        icon.classList.add('bi-chevron-right');
+    }
+}
+
+async function syncToDatabase(dryRun = false) {
+    if (!dryRun && !confirm('確定要將 ComfyUI Wildcard 目錄同步到資料庫嗎？\n這可能需要一些時間。')) {
+        return;
+    }
+
+    syncModal.show();
+    document.getElementById('sync-progress').style.display = 'block';
+    document.getElementById('sync-result').style.display = 'none';
+
+    try {
+        const response = await fetch('/api/comfy-wildcard/sync', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ dry_run: dryRun })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            document.getElementById('sync-progress').style.display = 'none';
+            document.getElementById('sync-result').style.display = 'block';
+            document.getElementById('sync-imported').textContent = result.imported.toLocaleString();
+            document.getElementById('sync-skipped').textContent = result.skipped.toLocaleString();
+            document.getElementById('sync-errors').textContent = result.errors.length;
+
+            if (result.errors.length > 0) {
+                console.error('同步錯誤:', result.errors);
+            }
+        } else {
+            alert('同步失敗: ' + (result.error || '未知錯誤'));
+            syncModal.hide();
+        }
+    } catch (error) {
+        alert('同步失敗: ' + error.message);
+        syncModal.hide();
+    }
+}
+</script>
+
+<style>
+.tree-node {
+    font-family: 'Courier New', monospace;
+    font-size: 0.95rem;
+}
+
+.tree-item {
+    border-radius: 4px;
+    transition: background-color 0.2s;
+}
+
+.directory-node .tree-item:hover {
+    background-color: #e9ecef !important;
+}
+
+.file-node .tree-item:hover {
+    background-color: #f8f9fa;
+}
+
+.toggle-icon {
+    margin-right: 5px;
+    transition: transform 0.2s;
+}
+
+.tree-children {
+    margin-left: 0;
+}
+</style>
+{% endblock %}

@@ -1,0 +1,415 @@
+{% extends "base.html" %}
+
+{% block title %}翻譯設定 - Wildcard 管理系統{% endblock %}
+
+{% block extra_css %}
+<style>
+    .form-text {
+        font-size: 0.875em;
+    }
+    .font-monospace {
+        font-family: 'Courier New', Courier, monospace;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-gear-fill"></i> 翻譯設定</h2>
+    </div>
+
+    <!-- 總體設定 -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-power"></i> 啟用中的翻譯服務</h5>
+        </div>
+        <div class="card-body">
+            <div class="row align-items-center">
+                <div class="col-md-4">
+                    <label for="activeProvider" class="form-label">選擇要使用的翻譯服務：</label>
+                    <select id="activeProvider" class="form-select"></select>
+                </div>
+                <div class="col-md-8">
+                     <div id="activation-status" class="mt-2"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 分頁導覽 -->
+    <ul class="nav nav-tabs" id="providerTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="ollama-tab" data-bs-toggle="tab" data-bs-target="#ollama-pane" type="button" role="tab">
+                <i class="bi bi-hdd-stack"></i> Ollama
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="gemini-tab" data-bs-toggle="tab" data-bs-target="#gemini-pane" type="button" role="tab">
+                <i class="bi bi-gem"></i> Google Gemini
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="pollinations-tab" data-bs-toggle="tab" data-bs-target="#pollinations-pane" type="button" role="tab">
+                <i class="bi bi-cloud-fill"></i> Pollinations
+            </button>
+        </li>
+    </ul>
+
+    <!-- 分頁內容 -->
+    <div class="tab-content" id="providerTabsContent">
+        <!-- Ollama 設定 -->
+        <div class="tab-pane fade show active" id="ollama-pane" role="tabpanel">
+            <div class="card card-body border-top-0">
+                <form id="ollamaSettingsForm" data-provider="ollama">
+                    <div class="mb-3">
+                        <label for="ollama-modelName" class="form-label"><i class="bi bi-cpu"></i> 模型名稱</label>
+                        <input type="text" class="form-control" id="ollama-modelName" required>
+                        <div class="form-text">例如: qwen:8b, llama3</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="ollama-temperature" class="form-label"><i class="bi bi-thermometer-half"></i> 溫度 (<span class="temperature-value">0.3</span>)</label>
+                        <input type="range" class="form-range" id="ollama-temperature" min="0" max="2" step="0.1">
+                    </div>
+                    <div class="mb-3">
+                        <label for="ollama-systemPrompt" class="form-label"><i class="bi bi-chat-square-text"></i> 系統提示詞</label>
+                        <textarea class="form-control font-monospace" id="ollama-systemPrompt" rows="10" required></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-save"></i> 儲存 Ollama 設定</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Gemini 設定 -->
+        <div class="tab-pane fade" id="gemini-pane" role="tabpanel">
+            <div class="card card-body border-top-0">
+                <form id="geminiSettingsForm" data-provider="gemini">
+                    <div class="mb-3">
+                        <label for="gemini-apiKey" class="form-label"><i class="bi bi-key-fill"></i> API 金鑰</label>
+                        <input type="password" class="form-control" id="gemini-apiKey" placeholder="如果需要更新，請在此輸入新的金鑰">
+                        <div class="form-text">您的 API 金鑰已儲存。此處留空表示不更新。</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="gemini-modelName" class="form-label"><i class="bi bi-cpu"></i> 模型名稱</label>
+                        <input type="text" class="form-control" id="gemini-modelName" required>
+                        <div class="form-text">預設: gemini-1.5-pro-preview-0514</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="gemini-temperature" class="form-label"><i class="bi bi-thermometer-half"></i> 溫度 (<span class="temperature-value">0.3</span>)</label>
+                        <input type="range" class="form-range" id="gemini-temperature" min="0" max="1" step="0.1">
+                    </div>
+                    <div class="mb-3">
+                        <label for="gemini-systemPrompt" class="form-label"><i class="bi bi-chat-square-text"></i> 系統提示詞</label>
+                        <textarea class="form-control font-monospace" id="gemini-systemPrompt" rows="10" required></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-save"></i> 儲存 Gemini 設定</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Pollinations 設定 -->
+        <div class="tab-pane fade" id="pollinations-pane" role="tabpanel">
+            <div class="card card-body border-top-0">
+                <form id="pollinationsSettingsForm" data-provider="pollinations">
+                    <div class="mb-3">
+                        <label for="pollinations-apiKey" class="form-label"><i class="bi bi-key-fill"></i> API 金鑰（完全可選）</label>
+                        <input type="password" class="form-control" id="pollinations-apiKey" placeholder="留空即可使用免費模型，無需 API 金鑰">
+                        <div class="form-text">
+                            <small class="text-success">✓ 免費模型（openai, openai-fast）無需 API 金鑰即可使用</small><br>
+                            <small class="text-muted">API 金鑰僅用於付費模型（mistral, deepseek 等）</small>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="pollinations-modelName" class="form-label"><i class="bi bi-cpu"></i> 模型名稱</label>
+                        <select class="form-select" id="pollinations-modelName" required>
+                            <option value="">正在載入模型...</option>
+                        </select>
+                        <div class="form-text">
+                            <button type="button" class="btn btn-sm btn-link p-0" id="pollinations-refreshModels">
+                                <i class="bi bi-arrow-clockwise"></i> 重新整理模型列表
+                            </button>
+                            <div class="mt-1">
+                                <small class="text-success">✓ 免費模型：openai, openai-fast</small><br>
+                                <small class="text-muted">其他模型需要付費訂閱（seed tier 或更高）</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="pollinations-temperature" class="form-label"><i class="bi bi-thermometer-half"></i> 溫度: <span class="temperature-value">1.0</span></label>
+                        <input type="range" class="form-range" id="pollinations-temperature" min="1" max="1" step="0.1" value="1.0" disabled>
+                        <input type="hidden" id="pollinations-temperature-value" value="1.0">
+                        <div class="form-text text-muted">Pollinations 模型固定使用 temperature=1.0</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="pollinations-systemPrompt" class="form-label"><i class="bi bi-chat-square-text"></i> 系統提示詞</label>
+                        <textarea class="form-control font-monospace" id="pollinations-systemPrompt" rows="10" required></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-save"></i> 儲存 Pollinations 設定</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- 測試區域 -->
+    <div class="card mt-4">
+        <div class="card-header bg-success text-white"><h5 class="mb-0"><i class="bi bi-play-circle"></i> 測試當前設定</h5></div>
+        <div class="card-body">
+            <div class="mb-3">
+                <label for="testText" class="form-label">輸入測試文本</label>
+                <input type="text" class="form-control" id="testText" value="a beautiful cat with blue eyes">
+            </div>
+            <button type="button" class="btn btn-success" id="testBtn"><i class="bi bi-play-fill"></i> 測試翻譯</button>
+            <div id="testResult" class="alert alert-info mt-3" style="display: none;"></div>
+            <div id="testError" class="alert alert-danger mt-3" style="display: none;"></div>
+            <div id="testLoading" class="mt-3" style="display: none;">...翻譯中...</div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // --- 頁面元素 ---
+    const activeProviderSelect = document.getElementById('activeProvider');
+    const ollamaForm = document.getElementById('ollamaSettingsForm');
+    const geminiForm = document.getElementById('geminiSettingsForm');
+    const pollinationsForm = document.getElementById('pollinationsSettingsForm');
+    const testBtn = document.getElementById('testBtn');
+
+    // --- 函數 ---
+    const getSettingsFromForm = (provider) => {
+        const form = document.getElementById(`${provider}SettingsForm`);
+
+        // 對於 Pollinations，使用隱藏欄位的固定值
+        let temperature;
+        if (provider === 'pollinations') {
+            temperature = 1.0; // 固定為 1.0
+        } else {
+            temperature = parseFloat(form.querySelector(`#${provider}-temperature`).value);
+        }
+
+        const settings = {
+            model_name: form.querySelector(`#${provider}-modelName`).value,
+            temperature: temperature,
+            system_prompt: form.querySelector(`#${provider}-systemPrompt`).value,
+        };
+        if (provider === 'gemini' || provider === 'pollinations') {
+            const apiKey = form.querySelector(`#${provider}-apiKey`).value;
+            if (apiKey) { // 只有在用戶輸入新 key 時才包含它
+                settings.api_key = apiKey;
+            }
+        }
+        return settings;
+    };
+    
+    const showStatus = (message, isError = false) => {
+        const statusDiv = document.getElementById('activation-status');
+        statusDiv.textContent = message;
+        statusDiv.className = isError ? 'text-danger' : 'text-success';
+    };
+
+    // 載入 Pollinations 模型列表
+    const loadPollinationsModels = async () => {
+        const modelSelect = document.getElementById('pollinations-modelName');
+        const currentValue = modelSelect.value;
+
+        try {
+            modelSelect.innerHTML = '<option value="">正在載入模型...</option>';
+            const response = await fetch('/api/translation-settings/pollinations/models');
+            if (!response.ok) throw new Error('無法載入模型列表');
+
+            const models = await response.json();
+            modelSelect.innerHTML = '';
+
+            if (models.length === 0) {
+                modelSelect.innerHTML = '<option value="openai">openai (免費)</option>';
+            } else {
+                // 免費模型（anonymous tier）
+                const freeModels = ['openai', 'openai-fast'];
+
+                models.forEach(model => {
+                    const isFree = freeModels.includes(model);
+                    const displayName = isFree ? `${model} (免費)` : `${model} (需付費)`;
+                    const option = new Option(displayName, model);
+                    if (!isFree) {
+                        option.style.color = '#999';
+                    }
+                    modelSelect.appendChild(option);
+                });
+            }
+
+            // 恢復之前的選擇（如果存在）
+            if (currentValue && Array.from(modelSelect.options).some(opt => opt.value === currentValue)) {
+                modelSelect.value = currentValue;
+            } else {
+                // 預設選擇 openai
+                modelSelect.value = 'openai';
+            }
+        } catch (error) {
+            console.error('載入 Pollinations 模型失敗:', error);
+            modelSelect.innerHTML = '<option value="openai">openai (免費)</option>';
+        }
+    };
+
+    // --- 事件監聽 ---
+    // 載入初始設定
+    const loadAllSettings = async () => {
+        try {
+            const response = await fetch('/api/translation-settings');
+            if (!response.ok) throw new Error('無法載入設定');
+            const settingsList = await response.json();
+            
+            activeProviderSelect.innerHTML = '';
+            let activeProvider = null;
+
+            settingsList.forEach(setting => {
+                // 填充啟用服務下拉選單
+                const option = new Option(setting.provider.toUpperCase(), setting.provider);
+                activeProviderSelect.appendChild(option);
+                if (setting.is_active) {
+                    activeProvider = setting.provider;
+                }
+
+                // 填充對應的表單
+                const form = document.getElementById(`${setting.provider}SettingsForm`);
+                if(form) {
+                    // 對於 Pollinations，先載入模型列表再設定值
+                    if (setting.provider === 'pollinations') {
+                        loadPollinationsModels().then(() => {
+                            form.querySelector(`#${setting.provider}-modelName`).value = setting.model_name;
+                        });
+                    } else {
+                        form.querySelector(`#${setting.provider}-modelName`).value = setting.model_name;
+                    }
+                    form.querySelector(`#${setting.provider}-temperature`).value = setting.temperature;
+                    form.querySelector(`#${setting.provider}-systemPrompt`).value = setting.system_prompt;
+                    form.querySelector('.temperature-value').textContent = setting.temperature;
+                }
+            });
+            
+            if(activeProvider) {
+                activeProviderSelect.value = activeProvider;
+                showStatus(`${activeProvider.toUpperCase()} 目前為啟用中。`);
+            }
+        } catch (error) {
+            showStatus(error.message, true);
+        }
+    };
+
+    // 切換啟用服務
+    activeProviderSelect.addEventListener('change', async (e) => {
+        const provider = e.target.value;
+        showStatus(`正在切換至 ${provider.toUpperCase()}...`);
+        try {
+            const response = await fetch('/api/translation-settings/activate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ provider })
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.error || '切換失敗');
+            showStatus(result.message);
+        } catch (error) {
+            showStatus(error.message, true);
+        }
+    });
+
+    // 儲存表單
+    const handleFormSubmit = async (e) => {
+        e.preventDefault();
+        const provider = e.target.dataset.provider;
+        const settings = getSettingsFromForm(provider);
+        
+        try {
+            const response = await fetch(`/api/translation-settings/${provider}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(settings)
+            });
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || '儲存失敗');
+            }
+            alert(`${provider.toUpperCase()} 設定已儲存！`);
+            if ((provider === 'gemini' || provider === 'pollinations') && settings.api_key) {
+                 document.getElementById(`${provider}-apiKey`).value = ''; // 清空 key 輸入框
+            }
+        } catch (error) {
+            alert(`儲存 ${provider.toUpperCase()} 設定失敗: ${error.message}`);
+        }
+    };
+    ollamaForm.addEventListener('submit', handleFormSubmit);
+    geminiForm.addEventListener('submit', handleFormSubmit);
+    pollinationsForm.addEventListener('submit', handleFormSubmit);
+
+    // 測試翻譯
+    testBtn.addEventListener('click', async () => {
+        const testText = document.getElementById('testText').value.trim();
+        if (!testText) { alert('請輸入測試文本'); return; }
+
+        const activePane = document.querySelector('.tab-pane.active');
+        if (!activePane) {
+            alert('找不到作用中的設定分頁');
+            return;
+        }
+        const activePaneId = activePane.id;
+        const activeButton = document.querySelector(`.nav-link[data-bs-target="#${activePaneId}"]`);
+        const activeTabProvider = activeButton.id.replace('-tab', '');
+        
+        const settings = getSettingsFromForm(activeTabProvider);
+
+        const testResult = document.getElementById('testResult');
+        const testError = document.getElementById('testError');
+        const testLoading = document.getElementById('testLoading');
+
+        testResult.style.display = 'none';
+        testError.style.display = 'none';
+        testLoading.style.display = 'block';
+
+        try {
+            const response = await fetch('/api/translation-settings/test', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: testText, provider: activeTabProvider, settings: settings })
+            });
+            
+            testLoading.style.display = 'none';
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.error || '測試失敗');
+
+            testResult.innerHTML = `
+                <p><strong>原文:</strong> ${result.original}</p>
+                <p><strong>譯文:</strong> <span class="fw-bold text-primary">${result.translated}</span></p>
+                <hr>
+                <small class="text-muted">使用模型: ${result.settings.model_name} | 溫度: ${result.settings.temperature}</small>
+            `;
+            testResult.style.display = 'block';
+        } catch (error) {
+            testLoading.style.display = 'none';
+            testError.textContent = '測試失敗: ' + error.message;
+            testError.style.display = 'block';
+        }
+    });
+
+    // Pollinations 模型重新整理按鈕
+    const refreshModelsBtn = document.getElementById('pollinations-refreshModels');
+    if (refreshModelsBtn) {
+        refreshModelsBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            loadPollinationsModels();
+        });
+    }
+
+    // 滑桿數值顯示
+    document.querySelectorAll('input[type="range"]').forEach(slider => {
+        slider.addEventListener('input', (e) => {
+            e.target.closest('.mb-3').querySelector('.temperature-value').textContent = e.target.value;
+        });
+    });
+
+    // 初始載入
+    loadAllSettings();
+});
+</script>
+{% endblock %}
