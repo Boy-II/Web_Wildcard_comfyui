@@ -1,4 +1,4 @@
-# Wildcard Management System
+# Web_Wildcard_comfyui
 
 <div align="center">
 
@@ -8,7 +8,7 @@
 [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](https://www.docker.com/)
 [![ComfyUI](https://img.shields.io/badge/ComfyUI-compatible-orange.svg)](https://github.com/comfyanonymous/ComfyUI)
 
-**基於 ComfyUI AdaptivePrompts 節點開發的 Wildcard 提示詞管理系統**
+**基於 ComfyUI AdaptivePrompts 節點開發的 Web Wildcard 管理系統**
 
 支援多層級分類、AI 翻譯、Web 管理介面
 
@@ -61,8 +61,8 @@
 
 1. **Clone 專案**
 ```bash
-git clone https://github.com/yourusername/wildcard.git
-cd wildcard
+git clone https://github.com/Boy-II/Web_Wildcard_comfyui.git
+cd Web_Wildcard_comfyui
 ```
 
 2. **設定環境變數**
@@ -228,8 +228,8 @@ docker-compose up -d
 
 ## 📞 聯絡與支援
 
-- **Issues**: [GitHub Issues](https://github.com/yourusername/wildcard/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/wildcard/discussions)
+- **Issues**: [GitHub Issues](https://github.com/Boy-II/Web_Wildcard_comfyui/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/Boy-II/Web_Wildcard_comfyui/discussions)
 
 ---
 
