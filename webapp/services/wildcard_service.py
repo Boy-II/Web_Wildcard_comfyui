@@ -15,8 +15,10 @@ def sync_active_to_comfy(wildcard: Wildcard):
     filepath = dir_path / filename
     try:
         dir_path.mkdir(parents=True, exist_ok=True)
+        existing = filepath.read_text(encoding='utf-8') if filepath.exists() else ''
+        separator = '\n' if existing and not existing.endswith('\n') else ''
         with open(filepath, 'a', encoding='utf-8') as f:
-            f.write(f'\n{wildcard.content}')
+            f.write(f'{separator}{wildcard.content}\n')
     except Exception as e:
         print(f'[wildcard_service] sync activate error: {e}')
 
@@ -33,7 +35,7 @@ def remove_from_comfy(wildcard: Wildcard):
             return
         lines = filepath.read_text(encoding='utf-8').splitlines(keepends=True)
         filepath.write_text(
-            ''.join(l for l in lines if l.strip() != wildcard.content),
+            ''.join(l for l in lines if l.strip() != wildcard.content.strip()),
             encoding='utf-8',
         )
     except Exception as e:

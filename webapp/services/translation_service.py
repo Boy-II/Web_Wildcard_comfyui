@@ -23,11 +23,15 @@ def batch_translate(texts: list[str]) -> list[Optional[str]]:
     if not setting:
         raise ValueError('沒有啟用的翻譯服務')
     helper = _build_helper(setting.provider, setting)
-    return helper.batch_translate(
+    result = helper.batch_translate(
         texts,
         system_prompt=setting.system_prompt,
         temperature=setting.temperature,
     )
+    # OllamaHelper and GeminiHelper return Dict[str, str]; OpenAIHelper returns list.
+    if isinstance(result, dict):
+        return [result.get(t) for t in texts]
+    return result
 
 
 def translate_with_override(text: str, provider: str, settings_dict: dict,

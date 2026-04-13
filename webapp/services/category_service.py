@@ -135,7 +135,7 @@ def _remove_category_from_comfy(cat: Category, comfy_path_str: str):
             if filepath.exists():
                 lines = filepath.read_text(encoding='utf-8').splitlines(keepends=True)
                 filepath.write_text(
-                    ''.join(l for l in lines if l.strip() != wildcard.content),
+                    ''.join(l for l in lines if l.strip() != wildcard.content.strip()),
                     encoding='utf-8',
                 )
         except Exception as e:
