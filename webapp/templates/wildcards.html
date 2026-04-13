@@ -1,208 +1,142 @@
 {% extends "base.html" %}
 
-{% block title %}Wildcard 管理{% endblock %}
+{% block title %}Wildcard 管理 - Wildcard 管理系統{% endblock %}
 
 {% block extra_css %}
 <style>
-    .table-hover tbody tr:hover {
-        background-color: #f5f5f5;
-    }
-    .form-switch .form-check-input {
-        cursor: pointer;
-    }
-    .action-icons {
-        white-space: nowrap;
-    }
-    .table td, .table th {
-        vertical-align: middle;
-    }
-    #batch-actions-menu {
-        display: none;
-    }
+    #cat-list { max-height: calc(100vh - 280px); overflow-y: auto; }
+    #cat-list .cat-item { cursor: pointer; padding: 6px 10px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; }
+    #cat-list .cat-item:hover { background: #f0f0f0; }
+    #cat-list .cat-item.active { background: #0d6efd; color: #fff; }
+    #cat-list .cat-item.active .badge { background: rgba(255,255,255,0.3) !important; color: #fff; }
+    #cat-list .cat-actions { display: none; gap: 4px; }
+    #cat-list .cat-item:hover .cat-actions,
+    #cat-list .cat-item.active .cat-actions { display: flex; }
+    .wildcard-row td { vertical-align: middle; }
+    .translation-status { font-size: 0.8em; }
+    #wc-table th, #wc-table td { white-space: nowrap; }
+    #wc-table td.content-cell { white-space: normal; max-width: 300px; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1><i class="bi bi-list-ul"></i> Wildcard 管理</h1>
-        <div>
-            <button class="btn btn-info me-2" onclick="syncComfyUIStatus()">
-                <i class="bi bi-arrow-repeat"></i> 從 ComfyUI 同步狀態
-            </button>
-            <button class="btn btn-primary" onclick="showAddModal()">
-                <i class="bi bi-plus-circle"></i> 新增 Wildcard
+<div class="row g-0">
+    <!-- LEFT: Category Panel -->
+    <div class="col-12 col-md-3 border-end pe-2">
+        <div class="d-flex align-items-center justify-content-between mb-2 mt-1">
+            <h6 class="mb-0 fw-bold"><i class="bi bi-folder"></i> 分類</h6>
+            <button class="btn btn-sm btn-outline-primary" id="btn-new-cat" title="新增分類">
+                <i class="bi bi-plus-lg"></i>
             </button>
         </div>
-    </div>
-
-    <!-- 篩選器 -->
-    <div class="card mb-4">
-        <div class="card-body">
-            <div class="row g-3 align-items-center">
-                <div class="col-md-4">
-                    <label for="categoryFilter" class="form-label">分類</label>
-                    <select id="categoryFilter" class="form-select"></select>
-                </div>
-                <div class="col-md-4">
-                    <label for="searchFilter" class="form-label">搜尋內容</label>
-                    <input type="text" id="searchFilter" class="form-control" placeholder="輸入關鍵字...">
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label">排序</label>
-                    <div class="form-check form-switch">
-                        <input class="form-check-input" type="checkbox" role="switch" id="untranslatedFirstToggle">
-                        <label class="form-check-label" for="untranslatedFirstToggle">
-                            未翻譯優先
-                        </label>
-                    </div>
-                </div>
-                <div class="col-md-2 d-flex align-items-end">
-                    <button class="btn btn-secondary w-100" onclick="applyFilters()">
-                        <i class="bi bi-search"></i> 篩選
-                    </button>
-                </div>
+        <!-- Inline new category input -->
+        <div id="new-cat-form" class="mb-2" style="display:none;">
+            <div class="input-group input-group-sm">
+                <input type="text" class="form-control" id="new-cat-name" placeholder="分類名稱 (英文, 用_連接)">
+                <button class="btn btn-primary" id="btn-save-cat"><i class="bi bi-check-lg"></i></button>
+                <button class="btn btn-secondary" id="btn-cancel-cat"><i class="bi bi-x-lg"></i></button>
             </div>
+            <input type="text" class="form-control form-control-sm mt-1" id="new-cat-display" placeholder="顯示名稱">
         </div>
-    </div>
-    
-    <!-- 批次操作 -->
-    <div id="batch-actions-menu" class="mb-3">
-        <div class="d-flex align-items-center">
-            <span id="selected-count" class="me-3 text-muted">已選取 0 項</span>
-            <div class="btn-group me-2">
-                <button class="btn btn-outline-success" onclick="batchUpdateActive(true)">
-                    <i class="bi bi-toggle-on"></i> 批次啟用
-                </button>
-                <button class="btn btn-outline-warning" onclick="batchUpdateActive(false)">
-                    <i class="bi bi-toggle-off"></i> 批次停用
-                </button>
-            </div>
-            <div class="btn-group">
-                <button class="btn btn-outline-secondary" onclick="showBatchTranslateModal()">
-                    <i class="bi bi-translate"></i> 批次翻譯
-                </button>
-                <button class="btn btn-outline-primary" onclick="showBatchCategoryModal()">
-                    <i class="bi bi-folder-symlink"></i> 修改分類
-                </button>
-                <button class="btn btn-outline-danger" onclick="batchDelete()">
-                    <i class="bi bi-trash"></i> 批次刪除
-                </button>
+        <!-- Search categories -->
+        <div class="mb-2">
+            <input type="text" class="form-control form-control-sm" id="cat-search" placeholder="搜尋分類...">
+        </div>
+        <!-- Category list -->
+        <div id="cat-list"></div>
+        <!-- Selected category actions -->
+        <div id="cat-selected-actions" class="mt-2 border-top pt-2" style="display:none;">
+            <div class="small text-muted mb-1">選中：<span id="cat-selected-name" class="fw-bold"></span></div>
+            <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-outline-secondary" id="btn-rename-cat"><i class="bi bi-pencil"></i> 改名</button>
+                <button class="btn btn-sm btn-outline-danger" id="btn-delete-cat"><i class="bi bi-trash"></i> 刪除</button>
             </div>
         </div>
     </div>
 
-
-    <!-- Wildcard 表格 -->
-    <div class="card">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <span>Wildcard 列表</span>
-            <span id="wildcard-count-info"></span>
+    <!-- RIGHT: Wildcards Panel -->
+    <div class="col-12 col-md-9 ps-3">
+        <!-- Toolbar -->
+        <div class="d-flex flex-wrap gap-2 align-items-center mb-3 mt-1">
+            <div class="flex-grow-1" style="min-width:200px; max-width:350px;">
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                    <input type="text" class="form-control" id="wc-search" placeholder="搜尋 Wildcard...">
+                </div>
+            </div>
+            <select class="form-select form-select-sm" id="wc-status-filter" style="width:auto;">
+                <option value="">全部狀態</option>
+                <option value="true">啟用中</option>
+                <option value="false">停用中</option>
+            </select>
+            <div class="dropdown">
+                <button class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
+                    批量操作
+                </button>
+                <ul class="dropdown-menu">
+                    <li><a class="dropdown-item" href="#" id="bulk-enable"><i class="bi bi-check-circle text-success"></i> 批量啟用</a></li>
+                    <li><a class="dropdown-item" href="#" id="bulk-disable"><i class="bi bi-x-circle text-warning"></i> 批量停用</a></li>
+                    <li><a class="dropdown-item" href="#" id="bulk-translate"><i class="bi bi-translate text-primary"></i> 批量翻譯</a></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item text-danger" href="#" id="bulk-delete"><i class="bi bi-trash"></i> 批量刪除</a></li>
+                </ul>
+            </div>
         </div>
+
+        <!-- Select-all + count row -->
+        <div class="d-flex align-items-center gap-3 mb-2 small text-muted">
+            <div class="form-check mb-0">
+                <input class="form-check-input" type="checkbox" id="select-all">
+                <label class="form-check-label" for="select-all">全選</label>
+            </div>
+            <span id="wc-count-label">共 0 筆</span>
+            <span id="selected-count-label" class="text-primary fw-bold" style="display:none;"></span>
+        </div>
+
+        <!-- Wildcards Table -->
         <div class="table-responsive">
-            <table class="table table-hover mb-0">
-                <thead>
+            <table class="table table-sm table-hover" id="wc-table">
+                <thead class="table-light">
                     <tr>
-                        <th scope="col" class="text-center" style="width: 5%;">
-                            <input class="form-check-input" type="checkbox" id="selectAllCheckbox">
-                        </th>
-                        <th scope="col">內容</th>
-                        <th scope="col">中文翻譯</th>
-                        <th scope="col">啟用</th>
-                        <th scope="col">分類</th>
-                        <th scope="col" class="text-end">操作</th>
+                        <th style="width:32px;"></th>
+                        <th>英文</th>
+                        <th>中文翻譯</th>
+                        <th style="width:80px;">狀態</th>
+                        <th style="width:60px;"></th>
                     </tr>
                 </thead>
-                <tbody id="wildcard-table-body">
-                    <!-- JS 動態載入 -->
+                <tbody id="wc-tbody">
+                    <tr><td colspan="5" class="text-center text-muted py-4">請從左側選擇分類</td></tr>
                 </tbody>
             </table>
         </div>
-        <div class="card-footer d-flex justify-content-between align-items-center">
-            <div class="d-flex align-items-center">
-                <div id="pagination-info" class="me-3"></div>
-                <div class="d-flex align-items-center">
-                    <span class="me-2 text-muted small">每頁顯示:</span>
-                    <select id="perPageSelect" class="form-select form-select-sm" style="width: auto;">
-                        <option value="20">20</option>
-                        <option value="50">50</option>
-                        <option value="100">100</option>
-                        <option value="200">200</option>
-                    </select>
-                </div>
-            </div>
-            <nav id="pagination-nav"></nav>
-        </div>
+
+        <!-- Pagination -->
+        <nav id="wc-pagination" aria-label="Wildcard 分頁"></nav>
     </div>
 </div>
 
-<!-- 新增/編輯 Wildcard Modal -->
-<div class="modal fade" id="wildcardModal" tabindex="-1" aria-labelledby="wildcardModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="wildcardModalLabel">新增 Wildcard</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <form id="wildcardForm">
-                    <input type="hidden" id="wildcardId">
-                    <div class="mb-3">
-                        <label for="wildcardCategory" class="form-label">分類 <span class="text-danger">*</span></label>
-                        <select id="wildcardCategory" class="form-select" required></select>
-                    </div>
-                    <div class="mb-3">
-                        <label for="wildcardContent" class="form-label">內容 <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" id="wildcardContent" required>
-                    </div>
-                    <div class="mb-3">
-                        <label for="wildcardContentZh" class="form-label">中文翻譯</label>
-                        <input type="text" class="form-control" id="wildcardContentZh">
-                    </div>
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label for="wildcardPriority" class="form-label">權重</label>
-                            <input type="number" class="form-control" id="wildcardPriority" value="0">
-                        </div>
-                        <div class="col-md-6 mb-3 d-flex align-items-center">
-                            <div class="form-check form-switch">
-                                <input class="form-check-input" type="checkbox" role="switch" id="wildcardIsActive" checked>
-                                <label class="form-check-label" for="wildcardIsActive"> 啟用此 Wildcard</label>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="mb-3">
-                        <label for="wildcardNotes" class="form-label">備註</label>
-                        <textarea class="form-control" id="wildcardNotes" rows="2"></textarea>
-                    </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                <button type="button" class="btn btn-primary" onclick="saveWildcard()">儲存</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- 批次修改分類 Modal -->
-<div class="modal fade" id="batchCategoryModal" tabindex="-1" aria-labelledby="batchCategoryModalLabel" aria-hidden="true">
+<!-- Edit Wildcard Modal -->
+<div class="modal fade" id="editModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="batchCategoryModalLabel">批次修改分類</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                <h5 class="modal-title" id="editModalTitle">編輯 Wildcard</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <p>您已選取 <strong id="batch-edit-count">0</strong> 個 wildcards。</p>
                 <div class="mb-3">
-                    <label for="batchTargetCategory" class="form-label">選擇目標分類</label>
-                    <select id="batchTargetCategory" class="form-select"></select>
+                    <label class="form-label fw-bold">英文內容</label>
+                    <input type="text" class="form-control" id="edit-content">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">中文翻譯</label>
+                    <input type="text" class="form-control" id="edit-content-zh">
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                <button type="button" class="btn btn-primary" onclick="saveBatchCategoryChange()">確認修改</button>
+                <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button class="btn btn-primary" id="btn-save-edit">儲存</button>
             </div>
         </div>
     </div>
@@ -211,515 +145,332 @@
 
 {% block extra_js %}
 <script>
-let wildcardModal;
-let batchCategoryModal;
-let currentPage = 1;
-let perPage;
-let allCategories = []; // 用於快取分類樹
+(function() {
+    // --- State ---
+    let selectedCategoryId = null;
+    let currentPage = 1;
+    const perPage = 50;
+    let totalPages = 1;
+    let searchTimer = null;
+    let editingWildcardId = null;
+    let allCategories = [];
 
-document.addEventListener('DOMContentLoaded', async () => {
-    wildcardModal = new bootstrap.Modal(document.getElementById('wildcardModal'));
-    batchCategoryModal = new bootstrap.Modal(document.getElementById('batchCategoryModal'));
+    // --- DOM refs ---
+    const catList = document.getElementById('cat-list');
+    const catSearch = document.getElementById('cat-search');
+    const wcTbody = document.getElementById('wc-tbody');
+    const wcSearch = document.getElementById('wc-search');
+    const statusFilter = document.getElementById('wc-status-filter');
+    const selectAll = document.getElementById('select-all');
+    const wcCountLabel = document.getElementById('wc-count-label');
+    const selectedCountLabel = document.getElementById('selected-count-label');
+    const pagination = document.getElementById('wc-pagination');
+    const editModal = new bootstrap.Modal(document.getElementById('editModal'));
 
-    loadPerPageSetting(); // 載入每頁顯示數量設定
+    // --- Toast helper ---
+    function toast(msg, type = 'success') {
+        const el = document.createElement('div');
+        el.className = `alert alert-${type} position-fixed bottom-0 end-0 m-3`;
+        el.style.zIndex = 9999;
+        el.textContent = msg;
+        document.body.appendChild(el);
+        setTimeout(() => el.remove(), 3000);
+    }
 
-    // 頁面載入時，僅讀取一次分類
-    await fetchAndCacheCategories();
-
-    // 初始填充篩選器
-    populateCategoryDropdown('categoryFilter', true, true);
-
-    // 從 URL 讀取參數並設定篩選器
-    loadFiltersFromURL();
-
-    applyFilters(); // 初次載入
-
-    // --- 事件監聽 ---
-    document.getElementById('categoryFilter').addEventListener('change', applyFilters);
-
-    document.getElementById('searchFilter').addEventListener('keypress', function (e) {
-        if (e.key === 'Enter') {
-            applyFilters();
-        }
+    // --- API helpers ---
+    const api = (url, opts = {}) => fetch(url, {
+        headers: {'Content-Type': 'application/json'},
+        ...opts
     });
 
-    document.getElementById('untranslatedFirstToggle').addEventListener('change', applyFilters);
-
-    document.getElementById('selectAllCheckbox').addEventListener('click', toggleSelectAll);
-
-    document.getElementById('perPageSelect').addEventListener('change', (e) => {
-        perPage = parseInt(e.target.value);
-        localStorage.setItem('wildcardsPerPage', perPage);
-        applyFilters(); // 重新載入
-    });
-});
-
-function loadPerPageSetting() {
-    const savedPerPage = localStorage.getItem('wildcardsPerPage');
-    perPage = savedPerPage ? parseInt(savedPerPage) : 50; // 預設改為 50
-    document.getElementById('perPageSelect').value = perPage;
-}
-
-function loadFiltersFromURL() {
-    // 從 URL 讀取查詢參數
-    const urlParams = new URLSearchParams(window.location.search);
-    const categoryId = urlParams.get('category_id');
-    const search = urlParams.get('search');
-
-    // 設定分類篩選器
-    if (categoryId) {
-        document.getElementById('categoryFilter').value = categoryId;
+    // --- Categories ---
+    async function loadCategories() {
+        const r = await api('/api/categories');
+        allCategories = await r.json();
+        renderCategories(allCategories);
     }
 
-    // 設定搜尋篩選器
-    if (search) {
-        document.getElementById('searchFilter').value = search;
-    }
-}
+    function renderCategories(cats) {
+        const q = catSearch.value.toLowerCase();
+        const filtered = q ? cats.filter(c =>
+            (c.display_name || c.name).toLowerCase().includes(q) || c.name.toLowerCase().includes(q)
+        ) : cats;
 
-// --- 分類載入與填充 ---
-async function fetchAndCacheCategories() {
-    try {
-        // 獲取扁平化的列表，其中已包含 full_path
-        const response = await fetch('/api/categories'); 
-        allCategories = await response.json();
-        // 根據路徑深度和名稱排序，讓顯示更有序
-        allCategories.sort((a, b) => {
-            const depthA = a.full_path.split(' > ').length;
-            const depthB = b.full_path.split(' > ').length;
-            if (depthA !== depthB) {
-                return depthA - depthB;
-            }
-            return a.full_path.localeCompare(b.full_path);
+        catList.innerHTML = filtered.length === 0
+            ? '<div class="text-muted small p-2">無分類</div>'
+            : filtered.map(c => `
+                <div class="cat-item ${c.id === selectedCategoryId ? 'active' : ''}" data-id="${c.id}" data-name="${c.name}" data-display="${c.display_name || c.name}">
+                    <span class="text-truncate" style="max-width:130px;" title="${c.display_name || c.name}">${c.display_name || c.name}</span>
+                    <div class="d-flex align-items-center gap-1">
+                        <span class="badge bg-secondary">${c.wildcard_count ?? 0}</span>
+                    </div>
+                </div>`).join('');
+
+        catList.querySelectorAll('.cat-item').forEach(el => {
+            el.addEventListener('click', () => selectCategory(parseInt(el.dataset.id), el.dataset.display));
         });
-    } catch (e) {
-        console.error("無法載入分類:", e);
-        alert("無法載入分類，頁面功能可能不完整。");
-    }
-}
-
-function populateCategoryDropdown(selectElementId, includeEmptyOption = true, isFilter = false) {
-    const selectElement = document.getElementById(selectElementId);
-    const currentVal = selectElement.value;
-
-    selectElement.innerHTML = '';
-    if (includeEmptyOption) {
-        const emptyText = isFilter ? '全部分類' : '請選擇分類';
-        selectElement.innerHTML = `<option value="">${emptyText}</option>`;
     }
 
-    allCategories.forEach(cat => {
-        const option = new Option(cat.full_path, cat.id);
-        selectElement.appendChild(option);
-    });
-
-    selectElement.value = currentVal;
-}
-
-// --- 主要資料載入和渲染 ---
-function applyFilters() {
-    currentPage = 1;
-    loadWildcards();
-}
-
-async function loadWildcards() {
-    const categoryId = document.getElementById('categoryFilter').value;
-    const search = document.getElementById('searchFilter').value;
-    const untranslatedFirst = document.getElementById('untranslatedFirstToggle').checked;
-
-    let url = `/api/wildcards?page=${currentPage}&per_page=${perPage}`;
-    if (categoryId) url += `&category_id=${categoryId}`;
-    if (search) url += `&search=${search}`;
-    if (untranslatedFirst) url += `&untranslated_first=true`;
-
-    try {
-        const response = await fetch(url);
-        const data = await response.json();
-        
-        const tableBody = document.getElementById('wildcard-table-body');
-        tableBody.innerHTML = '';
-        document.getElementById('selectAllCheckbox').checked = false;
-
-
-        if (data.items.length === 0) {
-            tableBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">找不到符合條件的 Wildcard。</td></tr>';
-        } else {
-            data.items.forEach(w => {
-                const row = `
-                    <tr id="wildcard-row-${w.id}">
-                        <td class="text-center">
-                            <input class="form-check-input row-checkbox" type="checkbox" value="${w.id}" onchange="updateSelectionState()">
-                        </td>
-                        <td class="wildcard-content">${w.content}</td>
-                        <td class="wildcard-translation">${w.content_zh || ''}</td>
-                        <td>
-                            <div class="form-check form-switch">
-                                <input class="form-check-input" type="checkbox" role="switch" ${w.is_active ? 'checked' : ''} onclick="toggleActive(${w.id}, this.checked)">
-                            </div>
-                        </td>
-                        <td>
-                            <span class="badge" style="background-color:${w.category_color || '#6c757d'}">
-                                ${w.category_display_name || 'N/A'}
-                            </span>
-                        </td>
-                        <td class="text-end action-icons">
-                            <button class="btn btn-sm btn-outline-secondary" title="翻譯" onclick="translateWildcard(${w.id})">
-                                <i class="bi bi-translate"></i>
-                            </button>
-                            <button class="btn btn-sm btn-outline-primary" title="編輯" onclick="editWildcard(${w.id})">
-                                <i class="bi bi-pencil"></i>
-                            </button>
-                            <button class="btn btn-sm btn-outline-danger" title="刪除" onclick="deleteWildcard(${w.id}, '${w.content}')">
-                                <i class="bi bi-trash"></i>
-                            </button>
-                        </td>
-                    </tr>
-                `;
-                tableBody.innerHTML += row;
-            });
-        }
-
-        document.getElementById('wildcard-count-info').textContent = `共 ${data.total} 筆`;
-        updateSelectionState();
-        renderPagination(data);
-
-    } catch (error) {
-        console.error('Error loading wildcards:', error);
-        document.getElementById('wildcard-table-body').innerHTML = '<tr><td colspan="6" class="text-center text-danger">載入失敗，請稍後再試。</td></tr>';
-    }
-}
-
-function renderPagination(data) {
-    const { total, page, per_page, pages } = data;
-    
-    const paginationNav = document.getElementById('pagination-nav');
-    if (pages <= 1) {
-        paginationNav.innerHTML = '';
-        document.getElementById('pagination-info').innerHTML = '';
-        return;
-    }
-    
-    let listItems = '';
-    listItems += `<li class="page-item ${page === 1 ? 'disabled' : ''}"><a class="page-link" href="#" onclick="changePage(${page - 1})">&laquo;</a></li>`;
-    for (let i = 1; i <= pages; i++) {
-        listItems += `<li class="page-item ${page === i ? 'active' : ''}"><a class="page-link" href="#" onclick="changePage(${i})">${i}</a></li>`;
-    }
-    listItems += `<li class="page-item ${page === pages ? 'disabled' : ''}"><a class="page-link" href="#" onclick="changePage(${page + 1})">&raquo;</a></li>`;
-    paginationNav.innerHTML = `<ul class="pagination mb-0">${listItems}</ul>`;
-    
-    const start = (page - 1) * per_page + 1;
-    const end = Math.min(start + per_page - 1, total);
-    document.getElementById('pagination-info').textContent = `顯示 ${start} 到 ${end} 筆`;
-}
-
-function changePage(page) {
-    if (page < 1) return;
-    currentPage = page;
-    loadWildcards();
-}
-
-// --- 勾選與批次操作 ---
-function getSelectedIds() {
-    return Array.from(document.querySelectorAll('.row-checkbox:checked')).map(cb => parseInt(cb.value));
-}
-
-function updateSelectionState() {
-    const selectedIds = getSelectedIds();
-    const count = selectedIds.length;
-    const batchMenu = document.getElementById('batch-actions-menu');
-    
-    document.getElementById('selected-count').textContent = `已選取 ${count} 項`;
-    batchMenu.style.display = count > 0 ? 'block' : 'none';
-
-    const allCheckboxes = document.querySelectorAll('.row-checkbox');
-    const allSelected = allCheckboxes.length > 0 && selectedIds.length === allCheckboxes.length;
-    document.getElementById('selectAllCheckbox').checked = allSelected;
-}
-
-function toggleSelectAll() {
-    const isChecked = document.getElementById('selectAllCheckbox').checked;
-    document.querySelectorAll('.row-checkbox').forEach(cb => cb.checked = isChecked);
-    updateSelectionState();
-}
-
-async function batchUpdateActive(isActive) {
-    const ids = getSelectedIds();
-    if (ids.length === 0) return;
-
-    const action = isActive ? '啟用' : '停用';
-    if (!confirm(`確定要${action}選取的 ${ids.length} 個 wildcards 嗎？\n這將會同步更新到 ComfyUI 檔案。`)) {
-        return;
-    }
-
-    try {
-        const response = await fetch('/api/wildcards/batch-update-active', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ids: ids, is_active: isActive })
-        });
-
-        const result = await response.json();
-        if (response.ok) {
-            alert(result.message || `批次${action}成功`);
-            loadWildcards();
-        } else {
-            throw new Error(result.error || '未知錯誤');
-        }
-    } catch(e) {
-        alert(`批次${action}失敗: ` + e.message);
-    }
-}
-
-async function batchDelete() {
-    const ids = getSelectedIds();
-    if (ids.length === 0) return;
-
-    if (!confirm(`確定要刪除選取的 ${ids.length} 個 wildcards 嗎？此操作不可復原。`)) {
-        return;
-    }
-
-    try {
-        const response = await fetch('/api/wildcards/batch-delete', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ids: ids })
-        });
-        if (response.ok) {
-            alert('批次刪除成功');
-            loadWildcards();
-        } else {
-            throw new Error('伺服器錯誤');
-        }
-    } catch(e) {
-        alert('批次刪除失敗: ' + e.message);
-    }
-}
-
-async function showBatchTranslateModal() {
-    const ids = getSelectedIds();
-    if (ids.length === 0) return;
-
-    if (!confirm(`確定要翻譯選取的 ${ids.length} 個 wildcards 嗎？這可能需要一些時間。`)) {
-        return;
-    }
-    
-    alert('開始批次翻譯，完成後會自動更新列表。請勿關閉頁面。');
-    
-    try {
-        const response = await fetch('/api/wildcards/batch-translate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ids: ids })
-        });
-        
-        if (response.ok) {
-            const result = await response.json();
-            alert(`翻譯完成！
-成功: ${result.translated}, 失敗: ${result.failed}`);
-        } else {
-            throw new Error('伺服器錯誤');
-        }
-    } catch(e) {
-        alert('批次翻譯失敗: ' + e.message);
-    } finally {
+    function selectCategory(id, name) {
+        selectedCategoryId = id;
+        currentPage = 1;
+        renderCategories(allCategories);
+        document.getElementById('cat-selected-name').textContent = name;
+        document.getElementById('cat-selected-actions').style.display = 'block';
         loadWildcards();
     }
-}
 
-function showBatchCategoryModal() {
-    const ids = getSelectedIds();
-    if (ids.length === 0) return;
+    catSearch.addEventListener('input', () => renderCategories(allCategories));
 
-    document.getElementById('batch-edit-count').textContent = ids.length;
-    populateCategoryDropdown('batchTargetCategory', false);
-    batchCategoryModal.show();
-}
+    // New category
+    document.getElementById('btn-new-cat').addEventListener('click', () => {
+        document.getElementById('new-cat-form').style.display = 'block';
+        document.getElementById('new-cat-name').focus();
+    });
+    document.getElementById('btn-cancel-cat').addEventListener('click', () => {
+        document.getElementById('new-cat-form').style.display = 'none';
+    });
+    document.getElementById('new-cat-name').addEventListener('keydown', e => {
+        if (e.key === 'Enter') document.getElementById('btn-save-cat').click();
+        if (e.key === 'Escape') document.getElementById('btn-cancel-cat').click();
+    });
+    document.getElementById('btn-save-cat').addEventListener('click', async () => {
+        const name = document.getElementById('new-cat-name').value.trim();
+        const display = document.getElementById('new-cat-display').value.trim() || name;
+        if (!name) return;
+        const r = await api('/api/categories', {method: 'POST', body: JSON.stringify({name, display_name: display})});
+        if (r.ok) {
+            document.getElementById('new-cat-form').style.display = 'none';
+            document.getElementById('new-cat-name').value = '';
+            document.getElementById('new-cat-display').value = '';
+            await loadCategories();
+            toast('分類已新增');
+        } else {
+            const e = await r.json();
+            toast(e.error || '新增失敗', 'danger');
+        }
+    });
 
-async function saveBatchCategoryChange() {
-    const ids = getSelectedIds();
-    const categoryId = document.getElementById('batchTargetCategory').value;
-
-    if (!categoryId) {
-        alert('請選擇一個目標分類');
-        return;
-    }
-
-    try {
-        const response = await fetch('/api/wildcards/batch-update-category', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ids: ids, category_id: parseInt(categoryId) })
+    // Rename category
+    document.getElementById('btn-rename-cat').addEventListener('click', async () => {
+        if (!selectedCategoryId) return;
+        const cat = allCategories.find(c => c.id === selectedCategoryId);
+        const newDisplay = prompt('新顯示名稱：', cat?.display_name || cat?.name);
+        if (!newDisplay) return;
+        const r = await api(`/api/categories/${selectedCategoryId}`, {
+            method: 'PUT', body: JSON.stringify({display_name: newDisplay})
         });
-        
-        const result = await response.json();
-        if (response.ok) {
-            alert(result.message);
-            batchCategoryModal.hide();
-            loadWildcards();
-        } else {
-            throw new Error(result.error || '未知錯誤');
+        if (r.ok) { await loadCategories(); toast('已重新命名'); }
+        else toast('改名失敗', 'danger');
+    });
+
+    // Delete category
+    document.getElementById('btn-delete-cat').addEventListener('click', async () => {
+        if (!selectedCategoryId) return;
+        const cat = allCategories.find(c => c.id === selectedCategoryId);
+        const count = cat?.wildcard_count ?? '?';
+        if (!confirm(`確定刪除「${cat?.display_name || cat?.name}」？\n這將刪除其中 ${count} 個 wildcard。`)) return;
+        const r = await api(`/api/categories/${selectedCategoryId}`, {method: 'DELETE'});
+        if (r.ok) {
+            selectedCategoryId = null;
+            document.getElementById('cat-selected-actions').style.display = 'none';
+            wcTbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">請從左側選擇分類</td></tr>';
+            pagination.innerHTML = '';
+            await loadCategories();
+            toast('分類已刪除');
+        } else toast('刪除失敗', 'danger');
+    });
+
+    // --- Wildcards ---
+    async function loadWildcards() {
+        if (!selectedCategoryId) return;
+        const search = wcSearch.value;
+        const status = statusFilter.value;
+        const params = new URLSearchParams({
+            category_id: selectedCategoryId,
+            page: currentPage,
+            per_page: perPage,
+        });
+        if (search) params.set('search', search);
+        if (status !== '') params.set('is_active', status);
+
+        const r = await api(`/api/wildcards?${params}`);
+        const data = await r.json();
+        totalPages = data.pages || 1;
+        wcCountLabel.textContent = `共 ${data.total} 筆`;
+        renderWildcards(data.items);
+        renderPagination(data.total, data.pages);
+    }
+
+    function renderWildcards(items) {
+        selectAll.checked = false;
+        selectedCountLabel.style.display = 'none';
+        if (items.length === 0) {
+            wcTbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">此分類無 Wildcard</td></tr>';
+            return;
         }
+        wcTbody.innerHTML = items.map(w => `
+            <tr class="wildcard-row" data-id="${w.id}">
+                <td><input type="checkbox" class="form-check-input wc-check" value="${w.id}"></td>
+                <td class="content-cell">${escHtml(w.content)}</td>
+                <td class="content-cell text-muted">${escHtml(w.content_zh || '')}</td>
+                <td>
+                    <div class="form-check form-switch mb-0">
+                        <input class="form-check-input status-toggle" type="checkbox" ${w.is_active ? 'checked' : ''} data-id="${w.id}">
+                    </div>
+                </td>
+                <td>
+                    <div class="dropdown">
+                        <button class="btn btn-sm btn-light" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><a class="dropdown-item" href="#" data-action="edit-content" data-id="${w.id}" data-content="${escAttr(w.content)}" data-zh="${escAttr(w.content_zh || '')}"><i class="bi bi-pencil"></i> 編輯</a></li>
+                            <li><a class="dropdown-item" href="#" data-action="translate" data-id="${w.id}"><i class="bi bi-translate"></i> 翻譯</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item text-danger" href="#" data-action="delete" data-id="${w.id}"><i class="bi bi-trash"></i> 刪除</a></li>
+                        </ul>
+                    </div>
+                </td>
+            </tr>`).join('');
 
-    } catch (e) {
-        alert('批次修改分類失敗: ' + e.message);
-    }
-}
-
-// --- 單一操作 ---
-function showAddModal() {
-    document.getElementById('wildcardForm').reset();
-    document.getElementById('wildcardId').value = '';
-    document.getElementById('wildcardModalLabel').textContent = '新增 Wildcard';
-    document.getElementById('wildcardIsActive').checked = true;
-    populateCategoryDropdown('wildcardCategory');
-    wildcardModal.show();
-}
-
-async function editWildcard(id) {
-    try {
-        const response = await fetch(`/api/wildcards/${id}`);
-        if (!response.ok) throw new Error('Failed to fetch wildcard data.');
-        
-        const wildcard = await response.json();
-        
-        populateCategoryDropdown('wildcardCategory');
-
-        document.getElementById('wildcardId').value = wildcard.id;
-        document.getElementById('wildcardModalLabel').textContent = '編輯 Wildcard';
-        document.getElementById('wildcardContent').value = wildcard.content;
-        document.getElementById('wildcardContentZh').value = wildcard.content_zh || '';
-        document.getElementById('wildcardCategory').value = wildcard.category_id;
-        document.getElementById('wildcardPriority').value = wildcard.priority;
-        document.getElementById('wildcardIsActive').checked = wildcard.is_active;
-        document.getElementById('wildcardNotes').value = wildcard.notes || '';
-        
-        wildcardModal.show();
-    } catch (error) {
-        console.error('Error fetching wildcard for edit:', error);
-        alert('找不到 Wildcard 資料!');
-    }
-}
-
-async function saveWildcard() {
-    const id = document.getElementById('wildcardId').value;
-    const data = {
-        content: document.getElementById('wildcardContent').value,
-        content_zh: document.getElementById('wildcardContentZh').value,
-        category_id: parseInt(document.getElementById('wildcardCategory').value),
-        priority: parseInt(document.getElementById('wildcardPriority').value),
-        is_active: document.getElementById('wildcardIsActive').checked,
-        notes: document.getElementById('wildcardNotes').value
-    };
-
-    if (!data.content || !data.category_id) {
-        alert('請填寫內容和分類!');
-        return;
-    }
-
-    const url = id ? `/api/wildcards/${id}` : '/api/wildcards';
-    const method = id ? 'PUT' : 'POST';
-
-    try {
-        const response = await fetch(url, {
-            method: method,
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
+        // Checkbox events
+        wcTbody.querySelectorAll('.wc-check').forEach(cb => {
+            cb.addEventListener('change', updateSelectedCount);
         });
 
-        if (response.ok) {
-            wildcardModal.hide();
-            loadWildcards();
+        // Status toggle
+        wcTbody.querySelectorAll('.status-toggle').forEach(sw => {
+            sw.addEventListener('change', async e => {
+                const id = parseInt(e.target.dataset.id);
+                const r = await api(`/api/wildcards/${id}`, {
+                    method: 'PUT', body: JSON.stringify({is_active: e.target.checked})
+                });
+                if (!r.ok) { e.target.checked = !e.target.checked; toast('狀態更新失敗', 'danger'); }
+            });
+        });
+
+        // Dropdown actions
+        wcTbody.querySelectorAll('[data-action]').forEach(el => {
+            el.addEventListener('click', async e => {
+                e.preventDefault();
+                const action = el.dataset.action;
+                const id = parseInt(el.dataset.id);
+                if (action === 'edit-content') openEditModal(id, el.dataset.content, el.dataset.zh);
+                else if (action === 'translate') await translateOne(id);
+                else if (action === 'delete') await deleteOne(id);
+            });
+        });
+    }
+
+    function escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+    function escAttr(s) { return s.replace(/"/g, '&quot;'); }
+
+    function updateSelectedCount() {
+        const checked = wcTbody.querySelectorAll('.wc-check:checked').length;
+        if (checked > 0) {
+            selectedCountLabel.textContent = `已選 ${checked} 筆`;
+            selectedCountLabel.style.display = '';
         } else {
-            const error = await response.json();
-            alert('儲存失敗: ' + (error.error || '未知錯誤'));
+            selectedCountLabel.style.display = 'none';
         }
-    } catch (err) {
-        console.error('Save error:', err);
-        alert('儲存時發生錯誤');
-    }
-}
-
-async function deleteWildcard(id, content) {
-    if (!confirm(`確定要刪除 Wildcard "${content}" 嗎?`)) {
-        return;
     }
 
-    try {
-        const response = await fetch(`/api/wildcards/${id}`, { method: 'DELETE' });
-        if (response.ok) {
-            loadWildcards();
-        } else {
-            alert('刪除失敗');
+    // Select all
+    selectAll.addEventListener('change', e => {
+        wcTbody.querySelectorAll('.wc-check').forEach(cb => cb.checked = e.target.checked);
+        updateSelectedCount();
+    });
+
+    function getSelectedIds() {
+        return [...wcTbody.querySelectorAll('.wc-check:checked')].map(cb => parseInt(cb.value));
+    }
+
+    // Pagination
+    function renderPagination(total, pages) {
+        if (pages <= 1) { pagination.innerHTML = ''; return; }
+        let html = '<ul class="pagination pagination-sm">';
+        html += `<li class="page-item ${currentPage===1?'disabled':''}"><a class="page-link" href="#" data-page="${currentPage-1}">«</a></li>`;
+        for (let i = 1; i <= pages; i++) {
+            if (pages > 10 && Math.abs(i - currentPage) > 3 && i !== 1 && i !== pages) {
+                if (i === currentPage - 4 || i === currentPage + 4) html += '<li class="page-item disabled"><span class="page-link">…</span></li>';
+                continue;
+            }
+            html += `<li class="page-item ${i===currentPage?'active':''}"><a class="page-link" href="#" data-page="${i}">${i}</a></li>`;
         }
-    } catch (err) {
-        console.error('Delete error:', err);
-        alert('刪除時發生錯誤');
+        html += `<li class="page-item ${currentPage===pages?'disabled':''}"><a class="page-link" href="#" data-page="${currentPage+1}">»</a></li>`;
+        html += '</ul>';
+        pagination.innerHTML = html;
+        pagination.querySelectorAll('[data-page]').forEach(a => {
+            a.addEventListener('click', e => {
+                e.preventDefault();
+                const p = parseInt(a.dataset.page);
+                if (p >= 1 && p <= totalPages) { currentPage = p; loadWildcards(); }
+            });
+        });
     }
-}
 
-async function toggleActive(id, isActive) {
-     try {
-        await fetch(`/api/wildcards/${id}`, {
+    // Search / filter debounce
+    let debounceTimer;
+    const debounce = fn => { clearTimeout(debounceTimer); debounceTimer = setTimeout(fn, 300); };
+    wcSearch.addEventListener('input', () => { currentPage = 1; debounce(loadWildcards); });
+    statusFilter.addEventListener('change', () => { currentPage = 1; loadWildcards(); });
+
+    // Edit modal
+    function openEditModal(id, content, zh) {
+        editingWildcardId = id;
+        document.getElementById('edit-content').value = content;
+        document.getElementById('edit-content-zh').value = zh;
+        editModal.show();
+    }
+    document.getElementById('btn-save-edit').addEventListener('click', async () => {
+        if (!editingWildcardId) return;
+        const r = await api(`/api/wildcards/${editingWildcardId}`, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ is_active: isActive })
+            body: JSON.stringify({
+                content: document.getElementById('edit-content').value,
+                content_zh: document.getElementById('edit-content-zh').value
+            })
         });
-    } catch (err) {
-        console.error('Toggle active error:', err);
-        alert('更新狀態時發生錯誤');
-        loadWildcards(); // Revert visual change on error
-    }
-}
+        if (r.ok) { editModal.hide(); loadWildcards(); toast('已儲存'); }
+        else toast('儲存失敗', 'danger');
+    });
 
-async function translateWildcard(id) {
-    const row = document.getElementById(`wildcard-row-${id}`);
-    const translationCell = row.querySelector('.wildcard-translation');
-    const originalText = translationCell.textContent;
-    translationCell.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>`;
-
-    try {
-        const response = await fetch(`/api/wildcards/${id}/translate`, { method: 'POST' });
-        const result = await response.json();
-
-        if (response.ok) {
-            translationCell.textContent = result.content_zh;
-        } else {
-            throw new Error(result.error || '未知錯誤');
-        }
-    } catch (e) {
-        alert('翻譯失敗: ' + e.message);
-        translationCell.textContent = originalText; // 恢復原狀
-    }
-}
-
-
-async function syncComfyUIStatus() {
-    if (!confirm('確定要從 ComfyUI 目錄同步啟用狀態嗎？\n這將會根據檔案內容覆寫資料庫中的啟用狀態。')) {
-        return;
+    // Single translate
+    async function translateOne(id) {
+        toast('翻譯中...', 'info');
+        const r = await api(`/api/wildcards/${id}/translate`, {method: 'POST'});
+        if (r.ok) { loadWildcards(); toast('翻譯完成'); }
+        else { const e = await r.json(); toast(e.error || '翻譯失敗', 'danger'); }
     }
 
-    const syncButton = event.target.closest('button');
-    const originalHtml = syncButton.innerHTML;
-    syncButton.disabled = true;
-    syncButton.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 同步中...`;
-
-    try {
-        const response = await fetch('/api/sync/status-from-comfy', { method: 'POST' });
-        const result = await response.json();
-
-        if (response.ok) {
-            alert(`同步成功！\n- 掃描檔案數: ${result.files_scanned}\n- 檔案中 Wildcard 總數: ${result.wildcards_found_in_files}\n- 資料庫中啟用 Wildcard 數: ${result.activated_wildcards}`);
-            loadWildcards();
-        } else {
-            throw new Error(result.error || '未知錯誤');
-        }
-    } catch (error) {
-        console.error('Sync error:', error);
-        alert('同步失敗: ' + error.message);
-    } finally {
-        syncButton.disabled = false;
-        syncButton.innerHTML = originalHtml;
+    // Delete single
+    async function deleteOne(id) {
+        if (!confirm('確定刪除此 Wildcard？')) return;
+        const r = await api(`/api/wildcards/${id}`, {method: 'DELETE'});
+        if (r.ok) { loadWildcards(); toast('已刪除'); }
+        else toast('刪除失敗', 'danger');
     }
-}
+
+    // Batch ops
+    async function batchOp(url, body, successMsg) {
+        const ids = getSelectedIds();
+        if (ids.length === 0) { toast('請先選擇 Wildcard', 'warning'); return; }
+        const r = await api(url, {method: 'POST', body: JSON.stringify({ids, ...body})});
+        if (r.ok) { loadWildcards(); toast(successMsg); }
+        else { const e = await r.json(); toast(e.error || '操作失敗', 'danger'); }
+    }
+    document.getElementById('bulk-enable').addEventListener('click', e => { e.preventDefault(); batchOp('/api/wildcards/batch-update-active', {is_active: true}, '已批量啟用'); });
+    document.getElementById('bulk-disable').addEventListener('click', e => { e.preventDefault(); batchOp('/api/wildcards/batch-update-active', {is_active: false}, '已批量停用'); });
+    document.getElementById('bulk-translate').addEventListener('click', e => { e.preventDefault(); batchOp('/api/wildcards/batch-translate', {}, '批量翻譯完成'); });
+    document.getElementById('bulk-delete').addEventListener('click', async e => {
+        e.preventDefault();
+        const ids = getSelectedIds();
+        if (ids.length === 0) { toast('請先選擇 Wildcard', 'warning'); return; }
+        if (!confirm(`確定刪除選中的 ${ids.length} 個 Wildcard？`)) return;
+        await batchOp('/api/wildcards/batch-delete', {}, `已刪除 ${ids.length} 個`);
+    });
+
+    // Init
+    loadCategories();
+})();
 </script>
 {% endblock %}

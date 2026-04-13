@@ -48,7 +48,6 @@ class GeminiHelper:
             generation_config = genai.types.GenerationConfig(temperature=temperature)
 
             response = self.model.generate_content(full_prompt, generation_config=generation_config)
-            print(f"Gemini API Response: {response}") # Added for debugging
             return response.text.strip()
         except Exception as e:
             print(f"Gemini API 錯誤: {e}", flush=True)

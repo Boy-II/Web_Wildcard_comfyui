@@ -77,7 +77,7 @@ def main():
             # 檢查 Ollama 連接
             if args.translate or args.ai_classify:
                 try:
-                    from ollama_helper import OllamaHelper
+                    from webapp.helpers.ollama_helper import OllamaHelper
                     ollama = OllamaHelper()
                     if ollama.check_connection():
                         print("✓ Ollama 服務連接成功")
@@ -91,7 +91,7 @@ def main():
                         args.translate = False
                         args.ai_classify = False
                 except ImportError:
-                    print("✗ ollama_helper 模組載入失敗")
+                    print("✗ webapp.helpers.ollama_helper 模組載入失敗")
                     return 1
 
             imported, skipped, errors = import_from_directory(
