@@ -188,3 +188,15 @@ def api_probe_openai_models():
         return jsonify(models)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@settings_bp.route('/admin/migrate-flatten', methods=['POST'])
+def api_migrate_flatten():
+    """One-time: flatten multi-level category tree to single level."""
+    try:
+        from migrate_flatten_categories import run_migration
+        result = run_migration()
+        return jsonify({'message': '扁平化遷移完成', **result})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
