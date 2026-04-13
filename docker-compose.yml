@@ -34,14 +34,13 @@ services:
       - ./webapp:/app/webapp
       - ./data:/app/data
       - ./logs:/app/logs
-      - ./sample file:/app/sample_file
+      - ./auto_categorizer.py:/app/auto_categorizer.py
       - ./ollama_helper.py:/app/ollama_helper.py
       - ./gemini_helper.py:/app/gemini_helper.py
       - ./pollinations_helper.py:/app/pollinations_helper.py
-      - ./auto_categorizer.py:/app/auto_categorizer.py
       - ./init_categories.py:/app/init_categories.py
       - ./bulk_import.py:/app/bulk_import.py
-      - D:/ComfyUI-aki-v1.6/ComfyUI\custom_nodes/comfyui-adaptiveprompts/wildcards:/app/comfy_wildcard
+      - ./wildcards:/app/comfy_wildcard
     environment:
       - FLASK_APP=app.py
       - FLASK_ENV=development
