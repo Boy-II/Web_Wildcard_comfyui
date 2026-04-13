@@ -19,40 +19,36 @@ services:
       timeout: 5s
       retries: 5
 
-  # 使用 Windows 原生 Ollama (更快、全 GPU 加載)
-  # 請在 Windows PowerShell 中執行：
-  # $env:OLLAMA_HOST = "0.0.0.0"
-  # ollama serve
+  # 使用宿主機原生 Ollama（更快、完整 GPU）
+  # Windows PowerShell 執行：$env:OLLAMA_HOST = "0.0.0.0"; ollama serve
+  # macOS/Linux 執行：OLLAMA_HOST=0.0.0.0 ollama serve
 
   web:
     build: .
     container_name: wildcard_web
     ports:
-      - "9000:5000"
+      - "9000:9000"
     volumes:
+      # 應用程式（熱更新）
       - ./app.py:/app/app.py
       - ./webapp:/app/webapp
-      - ./data:/app/data
-      - ./logs:/app/logs
-      - ./sample file:/app/sample_file
-      - ./ollama_helper.py:/app/ollama_helper.py
-      - ./gemini_helper.py:/app/gemini_helper.py
-      - ./pollinations_helper.py:/app/pollinations_helper.py
       - ./auto_categorizer.py:/app/auto_categorizer.py
       - ./init_categories.py:/app/init_categories.py
       - ./bulk_import.py:/app/bulk_import.py
-      - D:/ComfyUI-aki-v1.6/ComfyUI\custom_nodes/comfyui-adaptiveprompts/wildcards:/app/comfy_wildcard
+      - ./migrate_flatten_categories.py:/app/migrate_flatten_categories.py
+      # 資料與日誌持久化
+      - ./data:/app/data
+      - ./logs:/app/logs
+      # ComfyUI Wildcard 目錄（依實際路徑修改）
+      - ${COMFYUI_WILDCARD_PATH:-./comfy_wildcard}:/app/comfy_wildcard
+    env_file:
+      - .env
     environment:
-      - FLASK_APP=app.py
-      - FLASK_ENV=development
       - DATABASE_URL=postgresql://wildcard_user:wildcard_pass@db:5432/wildcard_db
-      - OLLAMA_BASE_URL=http://host.docker.internal:11434
-      - OLLAMA_MODEL=qwen3:8b
     depends_on:
       db:
         condition: service_healthy
     restart: unless-stopped
-    command: python app.py
     extra_hosts:
       - "host.docker.internal:host-gateway"
 

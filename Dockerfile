@@ -21,7 +21,7 @@ COPY . .
 RUN mkdir -p logs data
 
 # 暴露端口
-EXPOSE 5000
+EXPOSE 9000
 
 # 啟動應用
 CMD ["python", "app.py"]
