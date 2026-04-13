@@ -20,6 +20,8 @@ def create_app():
     app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', _default_db_url)
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
+    if app.config['SECRET_KEY'] == 'dev-secret-key-change-in-production':
+        print("[WARNING] SECRET_KEY is using the default dev value. Set SECRET_KEY env var in production.")
     app.config['OLLAMA_MODEL'] = os.getenv('OLLAMA_MODEL', 'qwen3:8b')
 
     _in_docker = os.path.exists('/.dockerenv') or os.path.exists('/run/.containerenv')
@@ -43,6 +45,7 @@ def create_app():
 
 def _migrate_schema():
     """Add columns that db.create_all() won't add to existing tables."""
+    from sqlalchemy.exc import OperationalError as SAOperationalError
     statements = [
         "ALTER TABLE translation_settings ADD COLUMN IF NOT EXISTS base_url VARCHAR(500)",
     ]
@@ -50,14 +53,18 @@ def _migrate_schema():
         try:
             db.session.execute(text(sql))
             db.session.commit()
-        except Exception:
+        except SAOperationalError:
             db.session.rollback()
-            # SQLite fallback (no IF NOT EXISTS)
+            # SQLite fallback: no IF NOT EXISTS support, column may already exist
             try:
                 db.session.execute(text(sql.replace(' IF NOT EXISTS', '')))
                 db.session.commit()
-            except Exception:
+            except SAOperationalError:
+                # Column already exists — this is expected on subsequent startups
                 db.session.rollback()
+        except Exception as e:
+            db.session.rollback()
+            print(f"[WARNING] _migrate_schema failed for: {sql!r} — {e}")
 
 
 def _register_blueprints(app):

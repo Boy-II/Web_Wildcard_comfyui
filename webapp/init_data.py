@@ -34,9 +34,19 @@ def init_categories():
     if Category.query.count() > 0:
         return
     try:
-        from init_categories import CATEGORY_TREE, create_category_tree
-        for root_data in CATEGORY_TREE:
-            create_category_tree(root_data)
+        import importlib.util
+        import os
+        # Find init_categories.py relative to project root (two levels up from webapp/)
+        webapp_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(webapp_dir)
+        spec = importlib.util.spec_from_file_location(
+            "init_categories",
+            os.path.join(project_root, "init_categories.py")
+        )
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        for root_data in mod.CATEGORY_TREE:
+            mod.create_category_tree(root_data)
         db.session.commit()
         print(f"✓ 已初始化 {Category.query.count()} 個分類")
     except Exception as e:
