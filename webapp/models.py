@@ -210,6 +210,7 @@ class TranslationSetting(db.Model):
     temperature = db.Column(db.Float, default=0.3)
     system_prompt = db.Column(db.Text)
     api_key = db.Column(db.Text) # 加密儲存 (未來)
+    base_url = db.Column(db.String(500))  # 自訂 API endpoint（OpenAI-compatible）
 
     def to_dict(self):
         return {
@@ -218,6 +219,7 @@ class TranslationSetting(db.Model):
             "model_name": self.model_name,
             "temperature": self.temperature,
             "system_prompt": self.system_prompt,
+            "base_url": self.base_url,
             # 安全起見，不直接回傳 api_key
             "has_api_key": bool(self.api_key)
         }
