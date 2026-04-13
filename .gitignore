@@ -68,3 +68,4 @@ sample file/
 
 # Claude 配置
 .claude/
+.worktrees/
