@@ -2,6 +2,7 @@
 from flask import Blueprint, request, jsonify, send_file, current_app, Response
 from webapp.models import db, Wildcard, Category, ImportHistory
 from webapp.services.category_service import get_comfy_wildcard_path
+from webapp.services import translation_service
 import os
 import zipfile
 import re
@@ -49,7 +50,7 @@ def categorize_filename(filename):
     return 'misc'
 
 
-def import_txt_file(file_path, use_ollama_classify=False, use_ollama_translate=False,
+def import_txt_file(file_path, use_ollama_classify=False, use_translation=False,
                     target_category_id=None, use_comma_separated=False):
     """
     匯入單一 TXT 檔案
@@ -57,7 +58,7 @@ def import_txt_file(file_path, use_ollama_classify=False, use_ollama_translate=F
     Args:
         file_path: 檔案路徑
         use_ollama_classify: 使用 Ollama 協助分類
-        use_ollama_translate: 使用 Ollama 翻譯
+        use_translation: 使用翻譯服務翻譯
         target_category_id: 手動指定的目標分類 ID
         use_comma_separated: 是否啟用逗號分隔格式
     """
@@ -94,7 +95,7 @@ def import_txt_file(file_path, use_ollama_classify=False, use_ollama_translate=F
                 db.session.flush()
 
     ollama = None
-    if use_ollama_classify or use_ollama_translate:
+    if use_ollama_classify:
         try:
             from webapp.helpers.ollama_helper import OllamaHelper
             ollama = OllamaHelper(
@@ -102,7 +103,7 @@ def import_txt_file(file_path, use_ollama_classify=False, use_ollama_translate=F
                 model=current_app.config['OLLAMA_MODEL']
             )
             if not ollama.check_connection():
-                print("警告: 無法連接到 Ollama，將不使用 AI 功能")
+                print("警告: 無法連接到 Ollama，將不使用 AI 分類功能")
                 ollama = None
         except Exception as e:
             print(f"Ollama 初始化失敗: {e}")
@@ -163,26 +164,23 @@ def import_txt_file(file_path, use_ollama_classify=False, use_ollama_translate=F
                 content=content,
                 category_id=current_category.id,
                 source_file=filename,
-                translation_status='pending' if use_ollama_translate else 'skipped'
+                translation_status='pending' if use_translation else 'skipped'
             )
             wildcards_to_import.append(wildcard)
             db.session.add(wildcard)
             imported += 1
 
-    if use_ollama_translate and ollama and wildcards_to_import:
+    if use_translation and wildcards_to_import:
         try:
             print(f"開始批次翻譯 {len(wildcards_to_import)} 個項目...")
             texts_to_translate = [w.content for w in wildcards_to_import]
-            translation_results = ollama.batch_translate(texts_to_translate, batch_size=10, show_progress=True)
+            translation_results = translation_service.batch_translate(texts_to_translate)
 
-            for wildcard in wildcards_to_import:
-                if wildcard.content in translation_results:
-                    translation = translation_results[wildcard.content]
-                    if translation and translation != wildcard.content:
-                        wildcard.content_zh = translation
-                        wildcard.translation_status = 'translated'
-                    else:
-                        wildcard.translation_status = 'failed'
+            for i, wildcard in enumerate(wildcards_to_import):
+                translation = translation_results[i] if i < len(translation_results) else None
+                if translation and translation != wildcard.content:
+                    wildcard.content_zh = translation
+                    wildcard.translation_status = 'translated'
                 else:
                     wildcard.translation_status = 'failed'
 
@@ -200,7 +198,7 @@ def import_txt_file(file_path, use_ollama_classify=False, use_ollama_translate=F
     return {'imported': imported, 'skipped': skipped}
 
 
-def import_from_directory(directory_path, use_ollama_classify=False, use_ollama_translate=False,
+def import_from_directory(directory_path, use_ollama_classify=False, use_translation=False,
                            recursive=True, target_category_id=None, use_comma_separated=False):
     """
     從目錄匯入所有 TXT 檔案
@@ -208,7 +206,7 @@ def import_from_directory(directory_path, use_ollama_classify=False, use_ollama_
     Args:
         directory_path: 目錄路徑
         use_ollama_classify: 是否使用 Ollama 協助分類
-        use_ollama_translate: 是否使用 Ollama 翻譯
+        use_translation: 是否使用翻譯服務翻譯
         recursive: 是否遞迴搜尋子目錄
         target_category_id: 手動指定的目標分類 ID
         use_comma_separated: 是否啟用逗號分隔格式
@@ -236,7 +234,7 @@ def import_from_directory(directory_path, use_ollama_classify=False, use_ollama_
             result = import_txt_file(
                 str(txt_file),
                 use_ollama_classify=current_use_ollama_classify,
-                use_ollama_translate=use_ollama_translate,
+                use_translation=use_translation,
                 target_category_id=target_category_id,
                 use_comma_separated=use_comma_separated
             )
@@ -263,7 +261,7 @@ def api_import_upload():
         return jsonify({'error': '沒有選擇檔案'}), 400
 
     category_id = request.form.get('category_id', type=int)
-    use_ollama_translate = request.form.get('translate', 'false').lower() == 'true'
+    use_translation = request.form.get('translate', 'false').lower() == 'true'
     use_comma_separated = request.form.get('comma_separated', 'false').lower() == 'true'
 
     filename = secure_filename(file.filename)
@@ -288,7 +286,7 @@ def api_import_upload():
                     str(extract_path),
                     recursive=True,
                     target_category_id=category_id,
-                    use_ollama_translate=use_ollama_translate,
+                    use_translation=use_translation,
                     use_comma_separated=use_comma_separated
                 )
 
@@ -296,7 +294,7 @@ def api_import_upload():
                 result = import_txt_file(
                     str(saved_filepath),
                     target_category_id=category_id,
-                    use_ollama_translate=use_ollama_translate,
+                    use_translation=use_translation,
                     use_comma_separated=use_comma_separated
                 )
                 total_imported = result.get('imported', 0)
@@ -333,13 +331,13 @@ def api_import_directory():
     data = request.json
     directory = data.get('directory', 'sample_file/wildcards')
     use_ollama_classify = data.get('use_ollama_classify', False)
-    use_ollama_translate = data.get('use_ollama_translate', False)
+    use_translation = data.get('use_ollama_translate', data.get('use_translation', False))
     recursive = data.get('recursive', True)
 
     imported, skipped, errors = import_from_directory(
         directory,
         use_ollama_classify=use_ollama_classify,
-        use_ollama_translate=use_ollama_translate,
+        use_translation=use_translation,
         recursive=recursive
     )
 

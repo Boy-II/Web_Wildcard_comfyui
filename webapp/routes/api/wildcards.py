@@ -68,6 +68,9 @@ def api_create_wildcard():
         notes=data.get('notes')
     )
     db.session.add(wildcard)
+    db.session.flush()
+    if wildcard.is_active:
+        wildcard_service.sync_active_to_comfy(wildcard)
     db.session.commit()
     return jsonify(wildcard.to_dict()), 201
 
@@ -88,27 +91,11 @@ def api_update_wildcard(wildcard_id):
     original_is_active = wildcard.is_active
     new_is_active = data.get('is_active', original_is_active)
 
-    if new_is_active != original_is_active and wildcard.category:
-        comfy_path_str = get_comfy_wildcard_path()
-        if comfy_path_str:
-            dir_path, filename = get_comfy_filepath_for_category(wildcard.category, comfy_path_str)
-            filepath = dir_path / filename
-
-            try:
-                if new_is_active:
-                    dir_path.mkdir(parents=True, exist_ok=True)
-                    with open(filepath, 'a', encoding='utf-8') as f:
-                        f.write(f"\n{wildcard.content}")
-                else:
-                    if filepath.exists():
-                        with open(filepath, 'r', encoding='utf-8') as f:
-                            lines = f.readlines()
-                        with open(filepath, 'w', encoding='utf-8') as f:
-                            for line in lines:
-                                if line.strip() != wildcard.content:
-                                    f.write(line)
-            except Exception as e:
-                print(f"檔案操作失敗: {e}")
+    if new_is_active != original_is_active:
+        if new_is_active:
+            wildcard_service.sync_active_to_comfy(wildcard)
+        else:
+            wildcard_service.remove_from_comfy(wildcard)
 
     wildcard.content = data.get('content', wildcard.content)
     wildcard.content_zh = data.get('content_zh', wildcard.content_zh)
@@ -126,6 +113,8 @@ def api_update_wildcard(wildcard_id):
 def api_delete_wildcard(wildcard_id):
     """刪除 Wildcard"""
     wildcard = Wildcard.query.get_or_404(wildcard_id)
+    if wildcard.is_active:
+        wildcard_service.remove_from_comfy(wildcard)
     db.session.delete(wildcard)
     db.session.commit()
     return '', 204
