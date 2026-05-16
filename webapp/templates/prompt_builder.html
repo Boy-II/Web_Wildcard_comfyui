@@ -5,20 +5,19 @@
 <style>
 /* ── Layout ─────────────────────────────────────────────────── */
 .pb-wrap {
-    display: grid;
-    grid-template-columns: 270px 1fr 290px;
-    gap: 10px;
+    display: flex;
+    gap: 0;
     height: 100vh;
     padding: .75rem 1.25rem;
     overflow: hidden;
-    transition: grid-template-columns .2s ease;
 }
-/* Danbooru mode: left panel expands for image browsing */
-.pb-wrap.dan-mode { grid-template-columns: 520px 1fr 290px; }
 
 .pb-left, .pb-center, .pb-right { min-height: 0; }
 
 .pb-left {
+    flex: 0 0 270px;
+    transition: flex-basis .2s ease;
+    margin-right: 10px;
     display: flex;
     flex-direction: column;
     border: 1px solid var(--border-color);
@@ -26,14 +25,42 @@
     background: var(--card-bg);
     overflow: hidden;
 }
+/* Danbooru mode: left panel expands for image browsing */
+.pb-wrap.dan-mode .pb-left { flex-basis: 520px; }
 
 .pb-center {
+    flex: 1 1 auto;
+    min-width: 200px;
     display: flex;
     flex-direction: column;
     gap: 8px;
 }
 
+/* Drag handle between center and right */
+.resize-handle {
+    flex: 0 0 8px;
+    cursor: col-resize;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    border-radius: 3px;
+}
+.resize-handle::before {
+    content: '';
+    width: 2px;
+    height: 52px;
+    background: var(--border-color);
+    border-radius: 1px;
+    opacity: 0;
+    transition: opacity .15s;
+}
+.resize-handle:hover::before,
+.resize-handle.active::before { opacity: 1; background: var(--accent); }
+
 .pb-right {
+    flex: 0 0 290px;
+    min-width: 180px;
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -257,11 +284,11 @@
     user-select: none;
 }
 
-/* Builder images */
+/* Builder images — preserve original aspect ratio, no crop */
 .builder-img-thumb {
     width: 100%;
-    aspect-ratio: 1;
-    object-fit: cover;
+    height: auto;
+    display: block;
     border-radius: 6px;
     cursor: zoom-in;
 }
@@ -309,6 +336,16 @@
                  onkeydown="if(event.key==='Enter') danSearch()">
           <button class="btn btn-primary" onclick="danSearch()">
             <i class="bi bi-search"></i>
+          </button>
+        </div>
+        <div class="d-flex gap-1 mt-1">
+          <button class="btn btn-outline-secondary py-0 px-2" style="font-size:.7rem;"
+                  onclick="danQuickSearch('order:rank')">
+            <i class="bi bi-trophy"></i> 排行榜
+          </button>
+          <button class="btn btn-outline-secondary py-0 px-2" style="font-size:.7rem;"
+                  onclick="danQuickSearch('')">
+            <i class="bi bi-clock-history"></i> 最新
           </button>
         </div>
         <div class="d-flex align-items-center justify-content-between mt-1">
@@ -388,8 +425,11 @@
 
   </div>
 
+  <!-- ═══════ Resize handle ═══════ -->
+  <div class="resize-handle" id="rh-right" title="拖拉調整寬度"></div>
+
   <!-- ═══════ RIGHT: Preview + ComfyUI ═══════ -->
-  <div class="pb-right">
+  <div class="pb-right" id="pb-right-panel">
 
     <!-- Single preview -->
     <div class="card" style="flex-shrink:0;">
@@ -577,7 +617,38 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('promptTextarea').addEventListener('input', updateStats);
     loadWildcards();
     loadComfyWorkflows();
+    initResizeHandle();
 });
+
+// ─── Resize handle ────────────────────────────────────────────
+function initResizeHandle() {
+    const handle  = document.getElementById('rh-right');
+    const rightEl = document.getElementById('pb-right-panel');
+    let _rh = null;
+
+    handle.addEventListener('mousedown', e => {
+        e.preventDefault();
+        _rh = { startX: e.clientX, startW: rightEl.offsetWidth };
+        handle.classList.add('active');
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+    });
+
+    document.addEventListener('mousemove', e => {
+        if (!_rh) return;
+        const dx = e.clientX - _rh.startX;
+        const newW = Math.max(180, Math.min(520, _rh.startW - dx));
+        rightEl.style.flex = `0 0 ${newW}px`;
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (!_rh) return;
+        _rh = null;
+        handle.classList.remove('active');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+    });
+}
 
 // ─── Tab switching ────────────────────────────────────────────
 function switchPbTab(tab) {
@@ -891,6 +962,11 @@ async function deleteTemplate(id, event) {
 }
 
 // ─── Danbooru ─────────────────────────────────────────────────
+function danQuickSearch(tags) {
+    document.getElementById('dan-search').value = tags;
+    danSearch();
+}
+
 async function danSearch(page = 1) {
     danPage = page;
     danCurrentTags = document.getElementById('dan-search').value.trim();
