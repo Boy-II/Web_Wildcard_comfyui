@@ -48,6 +48,30 @@ class OpenAIHelper:
             print(f'[OpenAIHelper] translate error: {e}')
             return None
 
+    def chat_messages(
+        self,
+        messages: list[dict],
+        temperature: float = 0.7,
+    ) -> Optional[str]:
+        """Multi-turn chat with a full messages array."""
+        payload = {
+            'model': self.model,
+            'messages': messages,
+            'temperature': temperature,
+        }
+        try:
+            resp = requests.post(
+                f'{self.base_url}/chat/completions',
+                json=payload,
+                headers=self._headers,
+                timeout=60,
+            )
+            resp.raise_for_status()
+            return resp.json()['choices'][0]['message']['content'].strip()
+        except Exception as e:
+            print(f'[OpenAIHelper] chat error: {e}')
+            return None
+
     def list_models(self) -> list[str]:
         try:
             resp = requests.get(
@@ -78,7 +102,7 @@ class OpenAIHelper:
         texts: list[str],
         system_prompt: str = '',
         temperature: float = 0.3,
-        max_workers: int = 4,
+        max_workers: int = 8,
     ) -> list[Optional[str]]:
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = [

@@ -1,0 +1,560 @@
+{% extends "base.html" %}
+{% block title %}Danbooru 工具 - Wildcard 管理系統{% endblock %}
+
+{% block content %}
+<div class="row mb-3">
+    <div class="col-12">
+        <h1 class="mb-0"><i class="bi bi-database-check"></i> Danbooru 工具</h1>
+        <p class="text-muted small mt-1">Tag 有效性驗證 ＆ 分類補全</p>
+    </div>
+</div>
+
+<!-- Tabs -->
+<ul class="nav nav-tabs mb-3" id="mainTabs">
+    <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-settings">⚙️ 設定</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-validate">✅ Tag 驗證</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-complete">🔍 分類補全</button></li>
+</ul>
+
+<div class="tab-content">
+
+    <!-- ===== 設定 Tab ===== -->
+    <div class="tab-pane fade show active" id="tab-settings">
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card mb-3">
+                    <div class="card-header fw-bold"><i class="bi bi-person-badge"></i> Danbooru 帳號設定</div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label">Login（使用者名稱）</label>
+                            <input type="text" class="form-control" id="s-login" placeholder="cosca">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">API Key</label>
+                            <input type="password" class="form-control" id="s-apikey" placeholder="留空保留現有 key">
+                            <div class="form-text" id="s-apikey-status"></div>
+                        </div>
+                        <button class="btn btn-primary" id="btn-save-settings"><i class="bi bi-save"></i> 儲存設定</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <div class="card mb-3">
+                    <div class="card-header fw-bold"><i class="bi bi-cloud-download"></i> 本地 Tag 資料庫</div>
+                    <div class="card-body">
+                        <div id="dataset-status-box" class="mb-3">
+                            <div class="text-muted small">載入中...</div>
+                        </div>
+                        <div class="progress mb-3" id="download-progress-wrap" style="display:none; height:20px;">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary"
+                                 id="download-progress-bar" style="width:0%">0</div>
+                        </div>
+                        <div class="d-flex gap-2 flex-wrap">
+                            <button class="btn btn-success" id="btn-start-download">
+                                <i class="bi bi-arrow-clockwise"></i> 增量更新
+                            </button>
+                            <button class="btn btn-outline-danger" id="btn-force-download">
+                                <i class="bi bi-cloud-download"></i> 完整重新下載
+                            </button>
+                        </div>
+                        <div class="form-text mt-1">
+                            <b>增量更新</b>：只拉取上次同步後的異動 tag（快速）。<br>
+                            <b>完整重新下載</b>：從 Danbooru 重新下載所有 tag（約 30 萬筆，需幾分鐘）。
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== 驗證 Tab ===== -->
+    <div class="tab-pane fade" id="tab-validate">
+        <div class="row">
+            <div class="col-md-4">
+                <div class="card mb-3">
+                    <div class="card-header fw-bold">驗證設定</div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label">選擇分類</label>
+                            <select class="form-select" id="v-category">
+                                <option value="">全部分類</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-primary w-100" id="btn-validate">
+                            <i class="bi bi-check2-circle"></i> 開始驗證
+                        </button>
+                        <div id="v-summary" class="mt-3"></div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header fw-bold">篩選結果</div>
+                    <div class="card-body p-2">
+                        <div class="d-flex gap-2 flex-wrap">
+                            <button class="btn btn-sm btn-outline-secondary active" data-filter="" id="filter-all">全部</button>
+                            <button class="btn btn-sm btn-outline-success" data-filter="valid">有效</button>
+                            <button class="btn btn-sm btn-outline-warning" data-filter="deprecated">已棄用</button>
+                            <button class="btn btn-sm btn-outline-danger" data-filter="not_found">不存在</button>
+                        </div>
+                        <div class="mt-2">
+                            <select class="form-select form-select-sm" id="v-filter-category">
+                                <option value="">所有分類</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span class="fw-bold">驗證結果</span>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-sm btn-outline-danger" id="btn-delete-invalid" style="display:none;">
+                                <i class="bi bi-trash"></i> 刪除選中
+                            </button>
+                            <span id="v-result-count" class="text-muted small align-self-center"></span>
+                        </div>
+                    </div>
+                    <div class="card-body p-0" style="max-height:70vh; overflow-y:auto;">
+                        <table class="table table-sm table-hover mb-0" id="v-table">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th style="width:32px;"><input type="checkbox" id="v-select-all"></th>
+                                    <th>Tag</th>
+                                    <th>中文</th>
+                                    <th>分類</th>
+                                    <th>Post 數</th>
+                                    <th>狀態</th>
+                                </tr>
+                            </thead>
+                            <tbody id="v-tbody">
+                                <tr><td colspan="6" class="text-center text-muted py-4">請先執行驗證</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== 補全 Tab ===== -->
+    <div class="tab-pane fade" id="tab-complete">
+        <div class="row">
+            <div class="col-md-4">
+                <div class="card mb-3">
+                    <div class="card-header fw-bold">補全設定</div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label">目標分類（匯入到此）</label>
+                            <select class="form-select" id="c-category" required>
+                                <option value="">請選擇分類</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">搜尋關鍵字</label>
+                            <input type="text" class="form-control" id="c-pattern" placeholder="例：dress、skirt、top">
+                            <div class="form-text">自動從分類名稱推導，可手動修改</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">結果數量上限</label>
+                            <input type="number" class="form-control" id="c-limit" value="200" min="10" max="1000">
+                        </div>
+                        <button class="btn btn-primary w-100" id="btn-search-complete">
+                            <i class="bi bi-search"></i> 搜尋缺少的 Tag
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span class="fw-bold">補全結果 <span id="c-result-count" class="text-muted fw-normal small"></span></span>
+                        <button class="btn btn-sm btn-success" id="btn-import-selected" style="display:none;">
+                            <i class="bi bi-plus-circle"></i> 匯入選中 (<span id="c-selected-count">0</span>)
+                        </button>
+                    </div>
+                    <div class="card-body p-0" style="max-height:70vh; overflow-y:auto;">
+                        <table class="table table-sm table-hover mb-0" id="c-table">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th style="width:32px;"><input type="checkbox" id="c-select-all"></th>
+                                    <th>Tag 名稱</th>
+                                    <th>Post 數</th>
+                                    <th>Danbooru 分類</th>
+                                </tr>
+                            </thead>
+                            <tbody id="c-tbody">
+                                <tr><td colspan="4" class="text-center text-muted py-4">請輸入關鍵字搜尋</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const CATEGORY_LABEL = {0:'一般',1:'藝術家',3:'版權',4:'角色',5:'元資料'};
+
+    function api(url, opts={}) {
+        return fetch(url, {
+            headers: {'Content-Type': 'application/json'},
+            ...opts
+        });
+    }
+
+    function toast(msg, type='success') {
+        const el = document.createElement('div');
+        el.className = `alert alert-${type} position-fixed bottom-0 end-0 m-3`;
+        el.style.zIndex = 9999;
+        el.textContent = msg;
+        document.body.appendChild(el);
+        setTimeout(() => el.remove(), 3500);
+    }
+
+    function escHtml(s) {
+        const d = document.createElement('div');
+        d.textContent = s || '';
+        return d.innerHTML;
+    }
+
+    // ===== Load categories into all selects =====
+    let allCategories = [];
+
+    async function loadCategories() {
+        const r = await api('/api/categories');
+        allCategories = await r.json();
+        ['v-category', 'c-category', 'v-filter-category'].forEach(id => {
+            const sel = document.getElementById(id);
+            if (!sel) return;
+            allCategories.forEach(cat => {
+                const opt = document.createElement('option');
+                opt.value = cat.id;
+                opt.textContent = cat.display_name;
+                sel.appendChild(opt);
+            });
+        });
+    }
+
+    // ===== Settings Tab =====
+
+    async function loadSettings() {
+        const r = await api('/api/danbooru/settings');
+        const d = await r.json();
+        document.getElementById('s-login').value = d.login || '';
+        document.getElementById('s-apikey-status').textContent = d.has_api_key ? '（已儲存 API key）' : '（尚未設定）';
+    }
+
+    document.getElementById('btn-save-settings').addEventListener('click', async () => {
+        const body = {
+            login: document.getElementById('s-login').value.trim(),
+            api_key: document.getElementById('s-apikey').value.trim() || undefined,
+        };
+        const r = await api('/api/danbooru/settings', {method:'PUT', body: JSON.stringify(body)});
+        if (r.ok) { toast('設定已儲存'); loadSettings(); }
+        else toast('儲存失敗', 'danger');
+    });
+
+    // ===== Dataset Status & Download =====
+
+    let pollTimer = null;
+
+    async function loadDatasetStatus() {
+        const r = await api('/api/danbooru/dataset-status');
+        const d = await r.json();
+        const box = document.getElementById('dataset-status-box');
+        const barWrap = document.getElementById('download-progress-wrap');
+        const bar = document.getElementById('download-progress-bar');
+
+        let statusBadge = '';
+        const isRunning = d.status && d.status.startsWith('running');
+        if (isRunning) {
+            const modeLabel = d.status.includes('incremental') ? '增量更新中' : '完整下載中';
+            statusBadge = `<span class="badge bg-primary">${modeLabel}</span>`;
+            barWrap.style.display = '';
+            const total = d.new_inserted + d.skipped;
+            // Animate width based on pages (assume ~1000/page, unknown total → oscillate 5-95%)
+            const pct = Math.min(95, Math.max(5, (d.pages_done % 100) + 5));
+            bar.style.width = pct + '%';
+            bar.textContent = `新增 ${d.new_inserted.toLocaleString()}　略過 ${d.skipped.toLocaleString()}　第 ${d.pages_done} 頁`;
+            if (!pollTimer) pollTimer = setInterval(loadDatasetStatus, 2000);
+        } else {
+            barWrap.style.display = 'none';
+            if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+            if (d.status === 'done') statusBadge = '<span class="badge bg-success">完成</span>';
+            else if (d.status && d.status.startsWith('error')) statusBadge = `<span class="badge bg-danger">錯誤</span>`;
+            else statusBadge = '<span class="badge bg-secondary">尚未同步</span>';
+        }
+
+        const elapsed = d.elapsed_sec != null
+            ? (() => { const m = Math.floor(d.elapsed_sec/60), s = d.elapsed_sec%60; return `${m}m ${s}s`; })()
+            : '—';
+
+        const progressTable = isRunning ? `
+            <table class="table table-sm table-borderless mb-0 small" style="width:auto;">
+                <tbody>
+                    <tr><td class="text-muted pe-3">已處理頁數</td><td><strong>${d.pages_done.toLocaleString()}</strong></td></tr>
+                    <tr><td class="text-muted pe-3">新增 tag</td><td><strong class="text-success">${d.new_inserted.toLocaleString()}</strong></td></tr>
+                    <tr><td class="text-muted pe-3">略過（已存在）</td><td><strong class="text-secondary">${d.skipped.toLocaleString()}</strong></td></tr>
+                    <tr><td class="text-muted pe-3">目前處理到</td><td><code>${escHtml(d.last_tag)}</code></td></tr>
+                    <tr><td class="text-muted pe-3">已耗時</td><td>${elapsed}</td></tr>
+                </tbody>
+            </table>` : '';
+
+        const checkpointLine = '';
+
+        const doneTable = (!isRunning && d.status === 'done' && d.pages_done > 0) ? `
+            <table class="table table-sm table-borderless mb-0 small mt-1" style="width:auto;">
+                <tbody>
+                    <tr><td class="text-muted pe-3">本次新增</td><td><strong class="text-success">${d.new_inserted.toLocaleString()}</strong></td></tr>
+                    <tr><td class="text-muted pe-3">略過</td><td><strong class="text-secondary">${d.skipped.toLocaleString()}</strong></td></tr>
+                    <tr><td class="text-muted pe-3">處理頁數</td><td>${d.pages_done.toLocaleString()}</td></tr>
+                </tbody>
+            </table>` : '';
+
+        box.innerHTML = `
+            <div class="d-flex align-items-center gap-2 mb-2">
+                <span>狀態：</span>${statusBadge}
+                ${d.status && d.status.startsWith('error') ? `<span class="text-danger small">${escHtml(d.status)}</span>` : ''}
+            </div>
+            <div class="small text-muted mb-1">
+                本地 tag 總數：<strong>${d.local_count.toLocaleString()}</strong>
+                ${d.last_synced ? ' &nbsp;·&nbsp; 最後同步：' + d.last_synced.slice(0,19).replace('T',' ') : ''}
+            </div>
+            ${progressTable}${doneTable}${checkpointLine}`;
+    }
+
+    async function startDownload(force) {
+        const r = await api('/api/danbooru/download', {
+            method: 'POST',
+            body: JSON.stringify({force})
+        });
+        const d = await r.json();
+        toast(d.message, r.ok ? 'info' : 'warning');
+        if (r.ok) loadDatasetStatus();
+    }
+
+    document.getElementById('btn-start-download').addEventListener('click', () => startDownload(false));
+
+    document.getElementById('btn-force-download').addEventListener('click', () => {
+        if (confirm('確定要完整重新下載所有 Danbooru tag？這將花費幾分鐘時間。')) {
+            startDownload(true);
+        }
+    });
+
+    // ===== Validate Tab =====
+
+    let vAllData = [];
+    let vCurrentFilter = '';
+    let vCategoryFilter = '';
+
+    document.getElementById('btn-validate').addEventListener('click', async () => {
+        const catId = document.getElementById('v-category').value;
+        const body = catId ? {category_id: parseInt(catId)} : {};
+        document.getElementById('v-tbody').innerHTML = '<tr><td colspan="6" class="text-center py-3"><div class="spinner-border spinner-border-sm"></div> 驗證中...</td></tr>';
+        document.getElementById('v-summary').innerHTML = '';
+
+        const r = await api('/api/danbooru/validate', {method:'POST', body: JSON.stringify(body)});
+        const d = await r.json();
+        if (!r.ok) { toast(d.error || '驗證失敗', 'danger'); return; }
+
+        document.getElementById('v-summary').innerHTML = `
+            <div class="small">
+                <span class="badge bg-success me-1">有效 ${d.valid}</span>
+                <span class="badge bg-warning text-dark me-1">已棄用 ${d.deprecated}</span>
+                <span class="badge bg-danger me-1">不存在 ${d.not_found}</span>
+                <span class="text-muted">共 ${d.total}</span>
+            </div>`;
+
+        // Sync result filter to the validated category
+        document.getElementById('v-filter-category').value = catId || '';
+
+        // Load full results
+        await loadValidationResults();
+    });
+
+    async function loadValidationResults() {
+        const catId = document.getElementById('v-filter-category').value;
+        const params = new URLSearchParams();
+        if (vCurrentFilter) params.set('status', vCurrentFilter);
+        if (catId) params.set('category_id', catId);
+        const r = await api('/api/danbooru/validation-results?' + params);
+        vAllData = await r.json();
+        renderValidationTable(vAllData);
+    }
+
+    function renderValidationTable(rows) {
+        const tbody = document.getElementById('v-tbody');
+        const countEl = document.getElementById('v-result-count');
+        countEl.textContent = `共 ${rows.length} 筆`;
+
+        if (!rows.length) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">沒有結果</td></tr>';
+            return;
+        }
+
+        const statusBadge = s => {
+            if (s === 'valid') return '<span class="badge bg-success">有效</span>';
+            if (s === 'deprecated') return '<span class="badge bg-warning text-dark">已棄用</span>';
+            return '<span class="badge bg-danger">不存在</span>';
+        };
+
+        tbody.innerHTML = rows.map(w => `
+            <tr>
+                <td><input type="checkbox" class="v-check" data-id="${w.id}"></td>
+                <td><code class="small">${escHtml(w.content)}</code></td>
+                <td class="text-muted small">${escHtml(w.content_zh)}</td>
+                <td class="small">${escHtml(w.category_name)}</td>
+                <td class="small">${w.danbooru_post_count != null ? w.danbooru_post_count.toLocaleString() : '-'}</td>
+                <td>${statusBadge(w.danbooru_status)}</td>
+            </tr>`).join('');
+
+        // Checkbox events
+        tbody.querySelectorAll('.v-check').forEach(cb => {
+            cb.addEventListener('change', updateVSelection);
+        });
+    }
+
+    function updateVSelection() {
+        const checked = document.querySelectorAll('.v-check:checked').length;
+        document.getElementById('btn-delete-invalid').style.display = checked ? '' : 'none';
+    }
+
+    document.getElementById('v-select-all').addEventListener('change', e => {
+        document.querySelectorAll('.v-check').forEach(cb => cb.checked = e.target.checked);
+        updateVSelection();
+    });
+
+    // Filter buttons
+    document.querySelectorAll('[data-filter]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('[data-filter]').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            vCurrentFilter = btn.dataset.filter;
+            loadValidationResults();
+        });
+    });
+
+    document.getElementById('v-filter-category').addEventListener('change', () => {
+        loadValidationResults();
+    });
+
+    document.getElementById('btn-delete-invalid').addEventListener('click', async () => {
+        const ids = [...document.querySelectorAll('.v-check:checked')].map(cb => parseInt(cb.dataset.id));
+        if (!ids.length) return;
+        if (!confirm(`確定刪除選中的 ${ids.length} 個 tag？`)) return;
+        const r = await api('/api/wildcards/batch-delete', {method:'POST', body: JSON.stringify({ids})});
+        if (r.ok) {
+            toast(`已刪除 ${ids.length} 筆`);
+            loadValidationResults();
+        } else toast('刪除失敗', 'danger');
+    });
+
+    // ===== Completion Tab =====
+
+    let cResults = [];
+
+    document.getElementById('c-category').addEventListener('change', () => {
+        const catId = document.getElementById('c-category').value;
+        if (!catId) return;
+        const cat = allCategories.find(c => c.id == catId);
+        if (!cat) return;
+        // Auto-derive pattern: last segment after '_'
+        const name = cat.name || '';
+        const parts = name.split('_');
+        const pattern = parts[parts.length - 1] || name;
+        document.getElementById('c-pattern').value = pattern;
+    });
+
+    document.getElementById('btn-search-complete').addEventListener('click', async () => {
+        const catId = document.getElementById('c-category').value;
+        const pattern = document.getElementById('c-pattern').value.trim();
+        const limit = parseInt(document.getElementById('c-limit').value) || 200;
+
+        if (!pattern) { toast('請輸入搜尋關鍵字', 'warning'); return; }
+
+        document.getElementById('c-tbody').innerHTML = '<tr><td colspan="4" class="text-center py-3"><div class="spinner-border spinner-border-sm"></div> 搜尋中...</td></tr>';
+        document.getElementById('c-result-count').textContent = '';
+        document.getElementById('btn-import-selected').style.display = 'none';
+
+        const params = new URLSearchParams({pattern, limit});
+        if (catId) params.set('category_id', catId);
+
+        const r = await api('/api/danbooru/complete?' + params);
+        const d = await r.json();
+        if (!r.ok) { toast(d.error || '搜尋失敗', 'danger'); return; }
+
+        cResults = d;
+        renderCompletionTable(d);
+    });
+
+    function renderCompletionTable(rows) {
+        const tbody = document.getElementById('c-tbody');
+        document.getElementById('c-result-count').textContent = `找到 ${rows.length} 筆`;
+
+        if (!rows.length) {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-4">沒有找到缺少的 tag</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = rows.map(t => `
+            <tr>
+                <td><input type="checkbox" class="c-check" data-name="${escHtml(t.name)}"></td>
+                <td><code class="small">${escHtml(t.name)}</code></td>
+                <td class="small">${t.post_count.toLocaleString()}</td>
+                <td class="small text-muted">${CATEGORY_LABEL[t.category] || t.category}</td>
+            </tr>`).join('');
+
+        tbody.querySelectorAll('.c-check').forEach(cb => {
+            cb.addEventListener('change', updateCSelection);
+        });
+        updateCSelection();
+    }
+
+    function updateCSelection() {
+        const checked = document.querySelectorAll('.c-check:checked').length;
+        document.getElementById('c-selected-count').textContent = checked;
+        document.getElementById('btn-import-selected').style.display = checked ? '' : 'none';
+    }
+
+    document.getElementById('c-select-all').addEventListener('change', e => {
+        document.querySelectorAll('.c-check').forEach(cb => cb.checked = e.target.checked);
+        updateCSelection();
+    });
+
+    document.getElementById('btn-import-selected').addEventListener('click', async () => {
+        const catId = document.getElementById('c-category').value;
+        if (!catId) { toast('請選擇目標分類', 'warning'); return; }
+        const tags = [...document.querySelectorAll('.c-check:checked')].map(cb => cb.dataset.name);
+        if (!tags.length) return;
+
+        const r = await api('/api/danbooru/import-tags', {
+            method: 'POST',
+            body: JSON.stringify({category_id: parseInt(catId), tags})
+        });
+        const d = await r.json();
+        if (r.ok) {
+            toast(d.message);
+            // Re-search to update diff
+            document.getElementById('btn-search-complete').click();
+        } else {
+            toast(d.error || '匯入失敗', 'danger');
+        }
+    });
+
+    // ===== Init =====
+    loadCategories();
+    loadSettings();
+    loadDatasetStatus();
+
+})();
+</script>
+{% endblock %}

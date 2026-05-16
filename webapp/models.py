@@ -5,6 +5,7 @@
 
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
+import json
 
 db = SQLAlchemy()
 
@@ -112,8 +113,8 @@ class Wildcard(db.Model):
     __tablename__ = 'wildcards'
 
     id = db.Column(db.Integer, primary_key=True)
-    content = db.Column(db.String(500), nullable=False, index=True)
-    content_zh = db.Column(db.String(500))  # 中文翻譯
+    content = db.Column(db.Text, nullable=False, index=True)
+    content_zh = db.Column(db.Text)
     category_id = db.Column(db.Integer, db.ForeignKey('categories.id'), nullable=False, index=True)
     source_file = db.Column(db.String(255))  # 來源檔案名稱
     priority = db.Column(db.Integer, default=0)  # 權重/優先級
@@ -121,6 +122,8 @@ class Wildcard(db.Model):
     tags = db.Column(db.String(500))  # 標籤（逗號分隔）
     notes = db.Column(db.Text)  # 備註
     translation_status = db.Column(db.String(20), default='pending')  # pending, translated, failed
+    danbooru_status = db.Column(db.String(20))       # valid / deprecated / not_found
+    danbooru_post_count = db.Column(db.Integer)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -151,6 +154,8 @@ class Wildcard(db.Model):
             'tags': self.tags.split(',') if self.tags else [],
             'notes': self.notes,
             'translation_status': self.translation_status,
+            'danbooru_status': self.danbooru_status,
+            'danbooru_post_count': self.danbooru_post_count,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
@@ -222,6 +227,113 @@ class TranslationSetting(db.Model):
             "base_url": self.base_url,
             # 安全起見，不直接回傳 api_key
             "has_api_key": bool(self.api_key)
+        }
+
+
+class TranslationProfile(db.Model):
+    """翻譯設定檔 — 可命名的多組翻譯設定"""
+    __tablename__ = 'translation_profiles'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    provider = db.Column(db.String(50), nullable=False)       # ollama / gemini / openai
+    is_active = db.Column(db.Boolean, default=False, nullable=False)
+    model_name = db.Column(db.String(200))
+    temperature = db.Column(db.Float, default=0.3)
+    system_prompt = db.Column(db.Text)
+    api_key = db.Column(db.Text)
+    base_url = db.Column(db.String(500))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'provider': self.provider,
+            'is_active': self.is_active,
+            'model_name': self.model_name,
+            'temperature': self.temperature,
+            'system_prompt': self.system_prompt,
+            'base_url': self.base_url,
+            'has_api_key': bool(self.api_key),
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class DanbooruTag(db.Model):
+    """Danbooru tag 本地快取"""
+    __tablename__ = 'danbooru_tags'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(300), unique=True, nullable=False, index=True)
+    post_count = db.Column(db.Integer, default=0, index=True)
+    category = db.Column(db.Integer, default=0)  # 0=general 1=artist 3=copyright 4=character 5=meta
+    is_deprecated = db.Column(db.Boolean, default=False, index=True)
+    synced_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'name': self.name,
+            'post_count': self.post_count,
+            'category': self.category,
+            'is_deprecated': self.is_deprecated,
+        }
+
+
+class ComfyWorkflow(db.Model):
+    """ComfyUI API 格式工作流"""
+    __tablename__ = 'comfy_workflows'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False, index=True)
+    description = db.Column(db.Text)
+    workflow_json = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    jobs = db.relationship('ComfyJob', back_populates='workflow',
+                           cascade='all, delete-orphan', lazy='dynamic')
+
+    def to_dict(self, include_json=False):
+        d = {
+            'id': self.id,
+            'name': self.name,
+            'description': self.description,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+        if include_json:
+            d['workflow_json'] = self.workflow_json
+        return d
+
+
+class ComfyJob(db.Model):
+    """ComfyUI 執行工作記錄"""
+    __tablename__ = 'comfy_jobs'
+
+    id = db.Column(db.Integer, primary_key=True)
+    workflow_id = db.Column(db.Integer, db.ForeignKey('comfy_workflows.id'), nullable=False, index=True)
+    prompt_id = db.Column(db.String(100))       # ComfyUI 回傳的 UUID
+    status = db.Column(db.String(20), default='queued', index=True)  # queued / running / completed / failed
+    output_images = db.Column(db.Text)           # JSON array of {filename, subfolder, type}
+    error_message = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    completed_at = db.Column(db.DateTime)
+
+    workflow = db.relationship('ComfyWorkflow', back_populates='jobs')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'workflow_id': self.workflow_id,
+            'prompt_id': self.prompt_id,
+            'status': self.status,
+            'output_images': json.loads(self.output_images) if self.output_images else [],
+            'error_message': self.error_message,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'completed_at': self.completed_at.isoformat() if self.completed_at else None,
         }
 
 

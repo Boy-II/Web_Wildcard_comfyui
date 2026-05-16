@@ -285,7 +285,7 @@ async function showEditModal(id) {
 
     document.getElementById('categoryId').value = category.id;
     document.getElementById('categoryName').value = category.name;
-    document.getElementById('categoryName').disabled = true;
+    document.getElementById('categoryName').disabled = false;
     document.getElementById('categoryDisplayName').value = category.display_name;
     document.getElementById('categoryDescription').value = category.description || '';
     document.getElementById('categoryColor').value = category.color || '#6c757d';
@@ -307,7 +307,7 @@ async function saveCategory() {
         return;
     }
 
-    if (!isEditMode && !/^[a-zA-Z0-9_]+$/.test(name)) {
+    if (!/^[a-zA-Z0-9_]+$/.test(name)) {
         alert('系統名稱只能包含英文字母、數字和底線');
         return;
     }

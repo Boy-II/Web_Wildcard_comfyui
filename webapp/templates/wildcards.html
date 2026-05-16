@@ -5,7 +5,10 @@
 {% block extra_css %}
 <style>
     #cat-list { max-height: calc(100vh - 280px); overflow-y: auto; }
-    #cat-list .cat-item { cursor: pointer; padding: 6px 10px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; }
+    #cat-list .cat-item { cursor: pointer; padding: 5px 8px 5px 0; border-radius: 4px; display: flex; align-items: center; gap: 4px; }
+    #cat-list .cat-item .flex-grow-1 { min-width: 0; }
+    #cat-list .cat-group-header:hover { background: #f0f0f0; }
+    #cat-list .cat-group-header .flex-grow-1 { min-width: 0; }
     #cat-list .cat-item:hover { background: #f0f0f0; }
     #cat-list .cat-item.active { background: #0d6efd; color: #fff; }
     #cat-list .cat-item.active .badge { background: rgba(255,255,255,0.3) !important; color: #fff; }
@@ -47,7 +50,9 @@
         <!-- Selected category actions -->
         <div id="cat-selected-actions" class="mt-2 border-top pt-2" style="display:none;">
             <div class="small text-muted mb-1">選中：<span id="cat-selected-name" class="fw-bold"></span></div>
-            <div class="d-flex gap-2">
+            <div class="d-flex gap-2 flex-wrap">
+                <button class="btn btn-sm btn-outline-success" id="btn-add-single" data-bs-toggle="modal" data-bs-target="#addSingleModal"><i class="bi bi-plus-circle"></i> 新增</button>
+                <button class="btn btn-sm btn-outline-primary" id="btn-import-cat" data-bs-toggle="modal" data-bs-target="#importModal"><i class="bi bi-upload"></i> 匯入</button>
                 <button class="btn btn-sm btn-outline-secondary" id="btn-rename-cat"><i class="bi bi-pencil"></i> 改名</button>
                 <button class="btn btn-sm btn-outline-danger" id="btn-delete-cat"><i class="bi bi-trash"></i> 刪除</button>
             </div>
@@ -77,10 +82,15 @@
                     <li><a class="dropdown-item" href="#" id="bulk-enable"><i class="bi bi-check-circle text-success"></i> 批量啟用</a></li>
                     <li><a class="dropdown-item" href="#" id="bulk-disable"><i class="bi bi-x-circle text-warning"></i> 批量停用</a></li>
                     <li><a class="dropdown-item" href="#" id="bulk-translate"><i class="bi bi-translate text-primary"></i> 批量翻譯</a></li>
+                    <li><a class="dropdown-item" href="#" id="bulk-optimize"><i class="bi bi-stars text-warning"></i> 批量優化</a></li>
+                    <li><a class="dropdown-item" href="#" id="bulk-migrate"><i class="bi bi-arrow-right-circle text-info"></i> 遷移分類</a></li>
                     <li><hr class="dropdown-divider"></li>
                     <li><a class="dropdown-item text-danger" href="#" id="bulk-delete"><i class="bi bi-trash"></i> 批量刪除</a></li>
                 </ul>
             </div>
+            <button class="btn btn-sm btn-outline-warning" id="btn-check-duplicates">
+                <i class="bi bi-copy"></i> 查重
+            </button>
         </div>
 
         <!-- Select-all + count row -->
@@ -116,6 +126,93 @@
     </div>
 </div>
 
+<!-- Rename Category Modal -->
+<div class="modal fade" id="renameCatModal" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title mb-0"><i class="bi bi-pencil"></i> 重新命名分類</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body py-2">
+                <div class="mb-2">
+                    <label class="form-label small fw-bold mb-1">英文系統名稱</label>
+                    <input type="text" class="form-control form-control-sm" id="rename-cat-name" placeholder="只能使用英文、數字、底線">
+                    <div class="form-text">更改後影響 wildcard 語法路徑</div>
+                </div>
+                <div class="mb-1">
+                    <label class="form-label small fw-bold mb-1">中文顯示名稱</label>
+                    <input type="text" class="form-control form-control-sm" id="rename-cat-display">
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">取消</button>
+                <button class="btn btn-primary btn-sm" id="btn-save-rename-cat">儲存</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Migrate Modal -->
+<div class="modal fade" id="migrateModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-arrow-right-circle"></i> 遷移分類</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small mb-3">將選中的 <strong id="migrate-count">0</strong> 個 Wildcard 移動到以下分類：</p>
+                <div class="mb-2">
+                    <input type="text" class="form-control form-control-sm" id="migrate-cat-search" placeholder="搜尋分類...">
+                </div>
+                <div id="migrate-cat-list" style="max-height:350px;overflow-y:auto;border:1px solid #dee2e6;border-radius:6px;"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button class="btn btn-info text-white" id="btn-do-migrate" disabled><i class="bi bi-arrow-right-circle"></i> 確認遷移</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Import Modal -->
+<div class="modal fade" id="importModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-upload"></i> 匯入至 <span id="import-modal-cat-name" class="text-primary"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small mb-3">每行一筆 Wildcard，直接匯入至選中的分類。</p>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">選擇 TXT 或 ZIP 檔案</label>
+                    <input type="file" class="form-control" id="import-file-input" accept=".txt,.zip">
+                </div>
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" id="import-lowercase-check">
+                    <label class="form-check-label" for="import-lowercase-check">全部轉為小寫</label>
+                </div>
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" id="import-translate-check">
+                    <label class="form-check-label" for="import-translate-check">匯入後自動翻譯</label>
+                </div>
+                <div id="import-progress-wrap" style="display:none;" class="mb-3">
+                    <div class="progress">
+                        <div id="import-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" style="width:0%">0%</div>
+                    </div>
+                </div>
+                <div id="import-result"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>
+                <button class="btn btn-primary" id="btn-do-import" disabled><i class="bi bi-upload"></i> 開始匯入</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Edit Wildcard Modal -->
 <div class="modal fade" id="editModal" tabindex="-1">
     <div class="modal-dialog">
@@ -141,6 +238,52 @@
         </div>
     </div>
 </div>
+
+<!-- Add Wildcards Modal -->
+<div class="modal fade" id="addSingleModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title mb-0"><i class="bi bi-plus-circle text-success"></i> 新增 Wildcard</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-2 small text-muted">分類：<span id="add-single-cat-name" class="fw-bold text-dark"></span></div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold mb-1">英文內容 <span class="text-danger">*</span></label>
+                    <textarea class="form-control font-monospace" id="add-single-content" rows="10" placeholder="每行輸入一筆 wildcard&#10;例如：&#10;red hair&#10;blue eyes&#10;long dress"></textarea>
+                    <div class="form-text">每行一筆，空白行自動略過</div>
+                </div>
+                <div id="add-single-result" class="mt-2"></div>
+            </div>
+            <div class="modal-footer py-2">
+                <span id="add-single-preview" class="me-auto small text-muted"></span>
+                <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">取消</button>
+                <button class="btn btn-success btn-sm" id="btn-do-add-single"><i class="bi bi-plus-circle"></i> 新增</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Duplicates Modal -->
+<div class="modal fade" id="duplicatesModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-copy text-warning"></i> 重複項目檢查</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="duplicates-body">
+                <div class="text-center text-muted py-4">載入中...</div>
+            </div>
+            <div class="modal-footer">
+                <span id="dup-summary" class="me-auto text-muted small"></span>
+                <button class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>
+                <button class="btn btn-danger" id="btn-auto-deduplicate"><i class="bi bi-trash"></i> 自動去重（保留小寫版本）</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -153,7 +296,9 @@
     let totalPages = 1;
     let searchTimer = null;
     let editingWildcardId = null;
-    let allCategories = [];
+    let allCategories = [];   // flat list (for search & lookups)
+    let categoryTree = [];    // tree structure (for rendering)
+    let expandedIds = new Set();
 
     // --- DOM refs ---
     const catList = document.getElementById('cat-list');
@@ -184,43 +329,131 @@
     });
 
     // --- Categories ---
+    // Build virtual tree by grouping display_name on '/'
+    // e.g. "服裝/裙子" → group "服裝" > leaf "裙子"
+    function buildVirtualTree(cats) {
+        const groups = new Map(); // groupKey → { label, totalCount, children[] }
+        const roots = [];        // categories with no '/' prefix
+
+        for (const c of cats) {
+            const display = c.display_name || c.name;
+            const slashIdx = display.indexOf('/');
+            if (slashIdx === -1) {
+                roots.push({ type: 'leaf', cat: c, label: display });
+            } else {
+                const groupKey = display.slice(0, slashIdx);
+                const leafLabel = display.slice(slashIdx + 1);
+                if (!groups.has(groupKey)) groups.set(groupKey, { label: groupKey, totalCount: 0, children: [] });
+                const g = groups.get(groupKey);
+                g.children.push({ type: 'leaf', cat: c, label: leafLabel });
+                g.totalCount += (c.wildcard_count ?? 0);
+            }
+        }
+
+        const tree = [];
+        for (const [key, g] of groups) {
+            tree.push({ type: 'group', key, label: g.label, totalCount: g.totalCount, children: g.children });
+        }
+        // Append ungrouped roots
+        for (const r of roots) tree.push(r);
+        return tree;
+    }
+
     async function loadCategories() {
         const r = await api('/api/categories');
         allCategories = await r.json();
-        renderCategories(allCategories);
+        categoryTree = buildVirtualTree(allCategories);
+        renderCategories();
     }
 
-    function renderCategories(cats) {
-        const q = catSearch.value.toLowerCase();
-        const filtered = q ? cats.filter(c =>
-            (c.display_name || c.name).toLowerCase().includes(q) || c.name.toLowerCase().includes(q)
-        ) : cats;
+    function renderCategories() {
+        const q = catSearch.value.toLowerCase().trim();
 
-        catList.innerHTML = filtered.length === 0
-            ? '<div class="text-muted small p-2">無分類</div>'
-            : filtered.map(c => `
-                <div class="cat-item ${c.id === selectedCategoryId ? 'active' : ''}" data-id="${c.id}" data-name="${c.name}" data-display="${c.display_name || c.name}">
-                    <span class="text-truncate" style="max-width:130px;" title="${c.display_name || c.name}">${c.display_name || c.name}</span>
-                    <div class="d-flex align-items-center gap-1">
+        if (q) {
+            const filtered = allCategories.filter(c =>
+                (c.display_name || c.name).toLowerCase().includes(q) ||
+                (c.name || '').toLowerCase().includes(q)
+            );
+            catList.innerHTML = filtered.length === 0
+                ? '<div class="text-muted small p-2">無分類</div>'
+                : filtered.map(c => {
+                    const isActive = c.id === selectedCategoryId;
+                    return `<div class="cat-item ${isActive ? 'active' : ''}" data-id="${c.id}" data-name="${c.name}" data-display="${c.display_name || c.name}">
+                        <span class="text-truncate flex-grow-1" title="${c.display_name || c.name}">${c.display_name || c.name}</span>
                         <span class="badge bg-secondary">${c.wildcard_count ?? 0}</span>
-                    </div>
-                </div>`).join('');
+                    </div>`;
+                }).join('');
+        } else {
+            catList.innerHTML = categoryTree.length === 0
+                ? '<div class="text-muted small p-2">無分類</div>'
+                : categoryTree.map(node => renderNode(node)).join('');
+        }
 
         catList.querySelectorAll('.cat-item').forEach(el => {
-            el.addEventListener('click', () => selectCategory(parseInt(el.dataset.id), el.dataset.display));
+            el.addEventListener('click', e => {
+                if (e.target.closest('.cat-toggle')) return;
+                selectCategory(parseInt(el.dataset.id), el.dataset.display);
+            });
         });
+        catList.querySelectorAll('.cat-toggle').forEach(btn => {
+            btn.addEventListener('click', e => {
+                e.stopPropagation();
+                const key = btn.dataset.key;
+                if (expandedIds.has(key)) expandedIds.delete(key);
+                else expandedIds.add(key);
+                renderCategories();
+            });
+        });
+    }
+
+    function renderNode(node) {
+        if (node.type === 'group') {
+            const isExpanded = expandedIds.has(node.key);
+            let html = `<div class="cat-group-header d-flex align-items-center px-2 py-1" style="cursor:pointer;border-radius:4px;" data-group="${node.key}">
+                <button class="cat-toggle btn btn-link p-0 me-1 text-reset" data-key="${node.key}" style="font-size:0.75em;line-height:1;">
+                    <i class="bi bi-chevron-${isExpanded ? 'down' : 'right'}"></i>
+                </button>
+                <i class="bi bi-folder${isExpanded ? '-open' : ''} me-1 text-warning" style="font-size:0.9em;"></i>
+                <span class="flex-grow-1 fw-semibold" style="font-size:0.9em;">${node.label}</span>
+                <span class="badge bg-secondary" style="font-size:0.75em;">${node.totalCount}</span>
+            </div>`;
+            if (isExpanded) {
+                html += node.children.map(child => `
+                    <div class="cat-item ${child.cat.id === selectedCategoryId ? 'active' : ''}" data-id="${child.cat.id}" data-name="${child.cat.name}" data-display="${child.cat.display_name || child.cat.name}" style="padding-left:28px;">
+                        <span class="text-truncate flex-grow-1" title="${child.label}">${child.label}</span>
+                        <span class="badge bg-secondary">${child.cat.wildcard_count ?? 0}</span>
+                    </div>`).join('');
+            }
+            return html;
+        } else {
+            // ungrouped root leaf
+            const c = node.cat;
+            const isActive = c.id === selectedCategoryId;
+            return `<div class="cat-item ${isActive ? 'active' : ''}" data-id="${c.id}" data-name="${c.name}" data-display="${c.display_name || c.name}">
+                <span class="text-truncate flex-grow-1" title="${node.label}">${node.label}</span>
+                <span class="badge bg-secondary">${c.wildcard_count ?? 0}</span>
+            </div>`;
+        }
     }
 
     function selectCategory(id, name) {
         selectedCategoryId = id;
         currentPage = 1;
-        renderCategories(allCategories);
+        // Auto-expand the parent group of the selected category
+        const cat = allCategories.find(c => c.id === id);
+        if (cat) {
+            const display = cat.display_name || cat.name;
+            const slashIdx = display.indexOf('/');
+            if (slashIdx !== -1) expandedIds.add(display.slice(0, slashIdx));
+        }
+        renderCategories();
         document.getElementById('cat-selected-name').textContent = name;
+        document.getElementById('add-single-cat-name').textContent = name;
         document.getElementById('cat-selected-actions').style.display = 'block';
         loadWildcards();
     }
 
-    catSearch.addEventListener('input', () => renderCategories(allCategories));
+    catSearch.addEventListener('input', () => renderCategories());
 
     // New category
     document.getElementById('btn-new-cat').addEventListener('click', () => {
@@ -252,16 +485,34 @@
     });
 
     // Rename category
-    document.getElementById('btn-rename-cat').addEventListener('click', async () => {
+    const renameCatModal = new bootstrap.Modal(document.getElementById('renameCatModal'));
+
+    document.getElementById('btn-rename-cat').addEventListener('click', () => {
         if (!selectedCategoryId) return;
         const cat = allCategories.find(c => c.id === selectedCategoryId);
-        const newDisplay = prompt('新顯示名稱：', cat?.display_name || cat?.name);
-        if (!newDisplay) return;
+        if (!cat) return;
+        document.getElementById('rename-cat-name').value = cat.name || '';
+        document.getElementById('rename-cat-display').value = cat.display_name || '';
+        renameCatModal.show();
+    });
+
+    document.getElementById('btn-save-rename-cat').addEventListener('click', async () => {
+        if (!selectedCategoryId) return;
+        const name = document.getElementById('rename-cat-name').value.trim();
+        const display = document.getElementById('rename-cat-display').value.trim();
+        if (!name || !display) { toast('請填寫兩個欄位', 'warning'); return; }
+        if (!/^[a-zA-Z0-9_]+$/.test(name)) { toast('英文名稱只能使用英文、數字、底線', 'warning'); return; }
         const r = await api(`/api/categories/${selectedCategoryId}`, {
-            method: 'PUT', body: JSON.stringify({display_name: newDisplay})
+            method: 'PUT', body: JSON.stringify({name, display_name: display})
         });
-        if (r.ok) { await loadCategories(); toast('已重新命名'); }
-        else toast('改名失敗', 'danger');
+        if (r.ok) {
+            renameCatModal.hide();
+            await loadCategories();
+            toast('已重新命名');
+        } else {
+            const e = await r.json().catch(() => ({}));
+            toast(e.error || '改名失敗', 'danger');
+        }
     });
 
     // Delete category
@@ -325,6 +576,7 @@
                         <ul class="dropdown-menu dropdown-menu-end">
                             <li><a class="dropdown-item" href="#" data-action="edit-content" data-id="${w.id}" data-content="${escAttr(w.content)}" data-zh="${escAttr(w.content_zh || '')}"><i class="bi bi-pencil"></i> 編輯</a></li>
                             <li><a class="dropdown-item" href="#" data-action="translate" data-id="${w.id}"><i class="bi bi-translate"></i> 翻譯</a></li>
+                            <li><a class="dropdown-item" href="#" data-action="optimize" data-id="${w.id}"><i class="bi bi-stars text-warning"></i> 優化</a></li>
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item text-danger" href="#" data-action="delete" data-id="${w.id}"><i class="bi bi-trash"></i> 刪除</a></li>
                         </ul>
@@ -356,6 +608,7 @@
                 const id = parseInt(el.dataset.id);
                 if (action === 'edit-content') openEditModal(id, el.dataset.content, el.dataset.zh);
                 else if (action === 'translate') await translateOne(id);
+                else if (action === 'optimize') await optimizeOne(id);
                 else if (action === 'delete') await deleteOne(id);
             });
         });
@@ -423,23 +676,70 @@
     }
     document.getElementById('btn-save-edit').addEventListener('click', async () => {
         if (!editingWildcardId) return;
+        const newContent = document.getElementById('edit-content').value;
+        const newZh = document.getElementById('edit-content-zh').value;
         const r = await api(`/api/wildcards/${editingWildcardId}`, {
             method: 'PUT',
-            body: JSON.stringify({
-                content: document.getElementById('edit-content').value,
-                content_zh: document.getElementById('edit-content-zh').value
-            })
+            body: JSON.stringify({content: newContent, content_zh: newZh})
         });
-        if (r.ok) { editModal.hide(); loadWildcards(); toast('已儲存'); }
-        else toast('儲存失敗', 'danger');
+        if (r.ok) {
+            editModal.hide();
+            // Update the row in-place to avoid sort order jumping
+            const row = wcTbody.querySelector(`tr[data-id="${editingWildcardId}"]`);
+            if (row) {
+                row.querySelector('.content-cell:nth-child(2)').textContent = newContent;
+                row.querySelector('.content-cell:nth-child(3)').textContent = newZh;
+                // Sync data attributes on the edit action link
+                const editLink = row.querySelector('[data-action="edit-content"]');
+                if (editLink) {
+                    editLink.dataset.content = newContent;
+                    editLink.dataset.zh = newZh;
+                }
+            } else {
+                loadWildcards();
+            }
+            toast('已儲存');
+        } else toast('儲存失敗', 'danger');
     });
+
+    function updateRowZh(id, zh) {
+        const row = wcTbody.querySelector(`tr[data-id="${id}"]`);
+        if (!row) return false;
+        row.querySelector('.content-cell:nth-child(3)').textContent = zh || '';
+        const editLink = row.querySelector('[data-action="edit-content"]');
+        if (editLink) editLink.dataset.zh = zh || '';
+        return true;
+    }
 
     // Single translate
     async function translateOne(id) {
         toast('翻譯中...', 'info');
         const r = await api(`/api/wildcards/${id}/translate`, {method: 'POST'});
-        if (r.ok) { loadWildcards(); toast('翻譯完成'); }
-        else { const e = await r.json(); toast(e.error || '翻譯失敗', 'danger'); }
+        if (r.ok) {
+            const data = await r.json();
+            if (!updateRowZh(id, data.content_zh)) loadWildcards();
+            toast('翻譯完成');
+        } else { const e = await r.json(); toast(e.error || '翻譯失敗', 'danger'); }
+    }
+
+    // Single optimize
+    async function optimizeOne(id) {
+        toast('優化中...', 'info');
+        const r = await api(`/api/wildcards/${id}/optimize`, {method: 'POST'});
+        if (r.ok) {
+            const data = await r.json();
+            const row = wcTbody.querySelector(`tr[data-id="${id}"]`);
+            if (row) {
+                if (data.content)    row.querySelector('.content-cell:nth-child(2)').textContent = data.content;
+                if (data.content_zh !== undefined) row.querySelector('.content-cell:nth-child(3)').textContent = data.content_zh || '';
+                const editLink = row.querySelector('[data-action="edit-content"]');
+                if (editLink) {
+                    if (data.content)    editLink.dataset.content = data.content;
+                    if (data.content_zh !== undefined) editLink.dataset.zh = data.content_zh || '';
+                }
+            } else { loadWildcards(); }
+            toast('優化完成');
+        } else { const e = await r.json(); toast(e.error || '優化失敗', 'danger'); }
     }
 
     // Delete single
@@ -461,6 +761,7 @@
     document.getElementById('bulk-enable').addEventListener('click', e => { e.preventDefault(); batchOp('/api/wildcards/batch-update-active', {is_active: true}, '已批量啟用'); });
     document.getElementById('bulk-disable').addEventListener('click', e => { e.preventDefault(); batchOp('/api/wildcards/batch-update-active', {is_active: false}, '已批量停用'); });
     document.getElementById('bulk-translate').addEventListener('click', e => { e.preventDefault(); batchOp('/api/wildcards/batch-translate', {}, '批量翻譯完成'); });
+    document.getElementById('bulk-optimize').addEventListener('click', e => { e.preventDefault(); batchOp('/api/wildcards/batch-optimize', {}, '批量優化完成'); });
     document.getElementById('bulk-delete').addEventListener('click', async e => {
         e.preventDefault();
         const ids = getSelectedIds();
@@ -469,8 +770,339 @@
         await batchOp('/api/wildcards/batch-delete', {}, `已刪除 ${ids.length} 個`);
     });
 
+    // --- Migrate modal ---
+    const migrateModal = new bootstrap.Modal(document.getElementById('migrateModal'));
+    let migrateTargetId = null;
+
+    document.getElementById('bulk-migrate').addEventListener('click', e => {
+        e.preventDefault();
+        const ids = getSelectedIds();
+        if (ids.length === 0) { toast('請先選擇 Wildcard', 'warning'); return; }
+        document.getElementById('migrate-count').textContent = ids.length;
+        migrateTargetId = null;
+        document.getElementById('btn-do-migrate').disabled = true;
+        document.getElementById('migrate-cat-search').value = '';
+        renderMigrateCatList('');
+        migrateModal.show();
+    });
+
+    function renderMigrateCatList(q) {
+        const lq = q.toLowerCase();
+        const { groups, roots } = buildMigrateVirtualTree(allCategories, lq);
+        const container = document.getElementById('migrate-cat-list');
+        let html = '';
+
+        for (const [groupKey, children] of groups) {
+            const filteredChildren = children.filter(({ cat }) =>
+                !lq || (cat.display_name || cat.name).toLowerCase().includes(lq)
+            );
+            if (filteredChildren.length === 0) continue;
+            html += `<div class="px-2 pt-2 pb-1 text-muted small fw-bold border-bottom" style="background:#f8f9fa;">
+                <i class="bi bi-folder text-warning me-1"></i>${groupKey}
+            </div>`;
+            for (const { cat, label } of filteredChildren) {
+                const isSelected = cat.id === migrateTargetId;
+                html += `<div class="migrate-cat-item px-3 py-2 d-flex justify-content-between align-items-center ${isSelected ? 'bg-info bg-opacity-10 fw-bold' : ''}"
+                    style="cursor:pointer;border-bottom:1px solid #f0f0f0;" data-id="${cat.id}">
+                    <span>${label} <span class="badge bg-secondary">${cat.wildcard_count ?? 0}</span></span>
+                    ${isSelected ? '<i class="bi bi-check-circle-fill text-info"></i>' : ''}
+                </div>`;
+            }
+        }
+        for (const { cat, label } of roots) {
+            if (lq && !(cat.display_name || cat.name).toLowerCase().includes(lq)) continue;
+            const isSelected = cat.id === migrateTargetId;
+            html += `<div class="migrate-cat-item px-3 py-2 d-flex justify-content-between align-items-center ${isSelected ? 'bg-info bg-opacity-10 fw-bold' : ''}"
+                style="cursor:pointer;border-bottom:1px solid #f0f0f0;" data-id="${cat.id}">
+                <span>${label} <span class="badge bg-secondary">${cat.wildcard_count ?? 0}</span></span>
+                ${isSelected ? '<i class="bi bi-check-circle-fill text-info"></i>' : ''}
+            </div>`;
+        }
+
+        container.innerHTML = html || '<div class="p-3 text-muted text-center small">無符合分類</div>';
+        container.querySelectorAll('.migrate-cat-item').forEach(el => {
+            el.addEventListener('click', () => {
+                migrateTargetId = parseInt(el.dataset.id);
+                document.getElementById('btn-do-migrate').disabled = false;
+                renderMigrateCatList(document.getElementById('migrate-cat-search').value);
+            });
+        });
+    }
+
+    function buildMigrateVirtualTree(cats, q) {
+        const groups = new Map();
+        const roots = [];
+        for (const c of cats) {
+            const display = c.display_name || c.name;
+            const slash = display.indexOf('/');
+            if (slash === -1) {
+                roots.push({ cat: c, label: display });
+            } else {
+                const key = display.slice(0, slash);
+                const label = display.slice(slash + 1);
+                if (!groups.has(key)) groups.set(key, []);
+                groups.get(key).push({ cat: c, label });
+            }
+        }
+        return { groups, roots };
+    }
+
+    document.getElementById('migrate-cat-search').addEventListener('input', e => {
+        renderMigrateCatList(e.target.value);
+    });
+
+    document.getElementById('btn-do-migrate').addEventListener('click', async () => {
+        const ids = getSelectedIds();
+        if (!ids.length || !migrateTargetId) return;
+        const btn = document.getElementById('btn-do-migrate');
+        btn.disabled = true;
+        try {
+            const r = await api('/api/wildcards/batch-update-category', {
+                method: 'POST', body: JSON.stringify({ ids, category_id: migrateTargetId })
+            });
+            const data = await r.json().catch(() => ({}));
+            if (r.ok) {
+                migrateModal.hide();
+                await loadCategories();
+                loadWildcards();
+                toast(data.message || '遷移完成');
+            } else {
+                toast(data.error || '遷移失敗', 'danger');
+            }
+        } catch(e) {
+            toast('網路錯誤，遷移失敗', 'danger');
+        } finally {
+            btn.disabled = false;
+        }
+    });
+
+    // --- Import modal ---
+    const importModal = new bootstrap.Modal(document.getElementById('importModal'));
+    const importFileInput = document.getElementById('import-file-input');
+    const btnDoImport = document.getElementById('btn-do-import');
+
+    document.getElementById('importModal').addEventListener('show.bs.modal', () => {
+        const catName = document.getElementById('cat-selected-name').textContent;
+        document.getElementById('import-modal-cat-name').textContent = catName;
+        importFileInput.value = '';
+        btnDoImport.disabled = true;
+        document.getElementById('import-result').innerHTML = '';
+        document.getElementById('import-progress-wrap').style.display = 'none';
+    });
+
+    importFileInput.addEventListener('change', () => {
+        btnDoImport.disabled = !importFileInput.files.length;
+    });
+
+    btnDoImport.addEventListener('click', () => {
+        if (!importFileInput.files.length || !selectedCategoryId) return;
+        const file = importFileInput.files[0];
+        const translate = document.getElementById('import-translate-check').checked;
+        const toLowercase = document.getElementById('import-lowercase-check').checked;
+        const progressWrap = document.getElementById('import-progress-wrap');
+        const progressBar = document.getElementById('import-progress-bar');
+        const resultDiv = document.getElementById('import-result');
+
+        btnDoImport.disabled = true;
+        progressWrap.style.display = 'block';
+        progressBar.style.width = '0%';
+        progressBar.textContent = '0%';
+        resultDiv.innerHTML = '';
+
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('category_id', selectedCategoryId);
+        formData.append('translate', translate);
+        formData.append('to_lowercase', toLowercase);
+
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '/api/import/upload', true);
+
+        xhr.upload.onprogress = e => {
+            if (e.lengthComputable) {
+                const pct = Math.round((e.loaded / e.total) * 100);
+                progressBar.style.width = pct + '%';
+                progressBar.textContent = pct + '%';
+            }
+        };
+
+        xhr.onload = () => {
+            btnDoImport.disabled = false;
+            progressBar.classList.remove('progress-bar-animated');
+            if (xhr.status === 200) {
+                const data = JSON.parse(xhr.responseText);
+                const cls = data.errors && data.errors.length ? 'alert-warning' : 'alert-success';
+                resultDiv.innerHTML = `<div class="alert ${cls} mb-0"><strong>匯入完成</strong><br>成功：${data.imported} 筆 / 跳過重複：${data.skipped} 筆</div>`;
+                loadWildcards();
+                loadCategories();
+            } else {
+                try {
+                    const data = JSON.parse(xhr.responseText);
+                    resultDiv.innerHTML = `<div class="alert alert-danger mb-0">匯入失敗：${data.error}</div>`;
+                } catch {
+                    resultDiv.innerHTML = `<div class="alert alert-danger mb-0">匯入失敗：伺服器錯誤</div>`;
+                }
+            }
+        };
+
+        xhr.onerror = () => {
+            btnDoImport.disabled = false;
+            resultDiv.innerHTML = `<div class="alert alert-danger mb-0">網路錯誤</div>`;
+        };
+
+        xhr.send(formData);
+    });
+
     // Init
     loadCategories();
+
+    // --- Duplicates ---
+    const duplicatesModal = new bootstrap.Modal(document.getElementById('duplicatesModal'));
+
+    document.getElementById('btn-check-duplicates').addEventListener('click', async () => {
+        document.getElementById('duplicates-body').innerHTML = '<div class="text-center text-muted py-4">載入中...</div>';
+        document.getElementById('dup-summary').textContent = '';
+        duplicatesModal.show();
+
+        const r = await api('/api/wildcards/duplicates');
+        const data = await r.json();
+        renderDuplicates(data);
+    });
+
+    function renderDuplicates(data) {
+        const body = document.getElementById('duplicates-body');
+        const summary = document.getElementById('dup-summary');
+        const groups = data.groups || [];
+
+        if (groups.length === 0) {
+            body.innerHTML = '<div class="alert alert-success mb-0"><i class="bi bi-check-circle"></i> 沒有發現重複項目！</div>';
+            summary.textContent = '';
+            return;
+        }
+
+        summary.textContent = `共發現 ${groups.length} 組重複，合計 ${groups.reduce((s, g) => s + g.items.length, 0)} 筆`;
+
+        body.innerHTML = groups.map((g, gi) => `
+            <div class="card mb-3 border-warning">
+                <div class="card-header bg-warning bg-opacity-10 py-1 small fw-bold">
+                    重複 ${gi + 1}：<code>${escHtml(g.key)}</code>（${g.items.length} 筆）
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-sm mb-0">
+                        <thead class="table-light"><tr>
+                            <th>內容</th><th>中文</th><th>分類</th><th>啟用</th><th style="width:90px;"></th>
+                        </tr></thead>
+                        <tbody>
+                            ${g.items.map(item => `
+                            <tr id="dup-row-${item.id}">
+                                <td><code>${escHtml(item.content)}</code></td>
+                                <td class="text-muted small">${escHtml(item.content_zh)}</td>
+                                <td class="small">${escHtml(item.category_name)}</td>
+                                <td>${item.is_active ? '<span class="badge bg-success">啟用</span>' : '<span class="badge bg-secondary">停用</span>'}</td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-danger py-0" onclick="deleteDupItem(${item.id})">
+                                        <i class="bi bi-trash"></i> 刪除
+                                    </button>
+                                </td>
+                            </tr>`).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>`).join('');
+    }
+
+    window.deleteDupItem = async function(id) {
+        if (!confirm('確定刪除此筆？')) return;
+        const r = await api('/api/wildcards/deduplicate', {
+            method: 'POST',
+            body: JSON.stringify({ delete_ids: [id] })
+        });
+        if (r.ok) {
+            document.getElementById(`dup-row-${id}`)?.remove();
+            toast('已刪除');
+            loadWildcards();
+        } else {
+            toast('刪除失敗', 'danger');
+        }
+    };
+
+    document.getElementById('btn-auto-deduplicate').addEventListener('click', async () => {
+        if (!confirm('自動去重將保留每組中的純小寫版本（或第一筆），其餘全部刪除。確定繼續？')) return;
+        const r = await api('/api/wildcards/deduplicate', { method: 'POST', body: JSON.stringify({}) });
+        if (r.ok) {
+            const d = await r.json();
+            toast(`已刪除 ${d.deleted} 筆重複項目`);
+            loadWildcards();
+            // reload duplicate list
+            const r2 = await api('/api/wildcards/duplicates');
+            renderDuplicates(await r2.json());
+        } else {
+            toast('去重失敗', 'danger');
+        }
+    });
+
+    // --- Add Wildcards (multi-line) ---
+    const addSingleModal = document.getElementById('addSingleModal');
+    addSingleModal.addEventListener('show.bs.modal', () => {
+        document.getElementById('add-single-content').value = '';
+        document.getElementById('add-single-result').innerHTML = '';
+        document.getElementById('add-single-preview').textContent = '';
+    });
+    addSingleModal.addEventListener('shown.bs.modal', () => {
+        document.getElementById('add-single-content').focus();
+    });
+
+    document.getElementById('add-single-content').addEventListener('input', () => {
+        const lines = document.getElementById('add-single-content').value
+            .split('\n').map(l => l.trim()).filter(l => l.length > 0);
+        document.getElementById('add-single-preview').textContent = lines.length > 0 ? `共 ${lines.length} 筆` : '';
+    });
+
+    document.getElementById('btn-do-add-single').addEventListener('click', async () => {
+        const lines = document.getElementById('add-single-content').value
+            .split('\n').map(l => l.trim()).filter(l => l.length > 0);
+        const resultEl = document.getElementById('add-single-result');
+        if (!lines.length) {
+            resultEl.innerHTML = '<div class="alert alert-warning py-1 small mb-0">請輸入至少一筆英文內容</div>';
+            return;
+        }
+        if (!selectedCategoryId) {
+            resultEl.innerHTML = '<div class="alert alert-warning py-1 small mb-0">請先選擇分類</div>';
+            return;
+        }
+        const btn = document.getElementById('btn-do-add-single');
+        btn.disabled = true;
+        resultEl.innerHTML = '<div class="text-muted small">新增中...</div>';
+        let ok = 0, skipped = 0, errors = [];
+        for (const line of lines) {
+            try {
+                const r = await api('/api/wildcards', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({content: line, category_id: selectedCategoryId})
+                });
+                if (r.ok) { ok++; }
+                else {
+                    const d = await r.json();
+                    if (d.error && d.error.toLowerCase().includes('exist')) { skipped++; }
+                    else { errors.push(line); }
+                }
+            } catch { errors.push(line); }
+        }
+        let msg = `新增 ${ok} 筆`;
+        if (skipped) msg += `，重複略過 ${skipped} 筆`;
+        const cls = errors.length ? 'alert-warning' : 'alert-success';
+        if (errors.length) msg += `，失敗 ${errors.length} 筆`;
+        resultEl.innerHTML = `<div class="alert ${cls} py-1 small mb-0">${msg}</div>`;
+        if (ok > 0) {
+            document.getElementById('add-single-content').value = '';
+            document.getElementById('add-single-preview').textContent = '';
+            loadWildcards();
+            loadCategories();
+        }
+        btn.disabled = false;
+    });
+
 })();
 </script>
 {% endblock %}

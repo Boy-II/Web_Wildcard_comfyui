@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 from flask import Blueprint, request, jsonify, send_file, current_app, Response
 from webapp.models import db, Wildcard, Category, ImportHistory
-from webapp.services.category_service import get_comfy_wildcard_path
 from webapp.services import translation_service
 import os
 import zipfile
@@ -10,6 +9,7 @@ import tempfile
 import uuid
 import csv
 import json
+import yaml
 from io import StringIO
 from pathlib import Path
 from werkzeug.utils import secure_filename
@@ -51,7 +51,7 @@ def categorize_filename(filename):
 
 
 def import_txt_file(file_path, use_ollama_classify=False, use_translation=False,
-                    target_category_id=None, use_comma_separated=False):
+                    target_category_id=None, use_comma_separated=False, to_lowercase=False):
     """
     匯入單一 TXT 檔案
 
@@ -61,6 +61,7 @@ def import_txt_file(file_path, use_ollama_classify=False, use_translation=False,
         use_translation: 使用翻譯服務翻譯
         target_category_id: 手動指定的目標分類 ID
         use_comma_separated: 是否啟用逗號分隔格式
+        to_lowercase: 是否將內容全部轉為小寫
     """
     try:
         from auto_categorizer import find_best_category, get_category_by_path
@@ -119,56 +120,46 @@ def import_txt_file(file_path, use_ollama_classify=False, use_translation=False,
         if not cleaned_line:
             continue
 
-        if use_comma_separated and ',' in cleaned_line:
-            items = [item.strip() for item in cleaned_line.split(',')]
-        else:
-            items = [cleaned_line]
+        content = cleaned_line.strip()
+        if to_lowercase:
+            content = content.lower()
 
-        for raw_content in items:
-            if not raw_content:
-                continue
+        if not content:
+            continue
 
-            if use_comma_separated:
-                content = raw_content.replace('_', ' ').strip()
-            else:
-                content = raw_content.strip()
+        existing = Wildcard.query.filter_by(content=content).first()
+        if existing:
+            skipped += 1
+            continue
 
-            if not content:
-                continue
+        current_category = category
+        if use_ollama_classify and ollama:
+            try:
+                all_categories = Category.query.all()
+                categories_info = [
+                    {
+                        'full_path': cat.get_full_path('/'),
+                        'description': cat.description or ''
+                    }
+                    for cat in all_categories if cat.level <= 2
+                ]
+                suggested_path = ollama.suggest_category(content, filename, categories_info)
+                if suggested_path:
+                    suggested_cat = get_category_by_path(suggested_path.strip())
+                    if suggested_cat:
+                        current_category = suggested_cat
+            except Exception as e:
+                print(f"AI 分類失敗: {e}")
 
-            existing = Wildcard.query.filter_by(content=content).first()
-            if existing:
-                skipped += 1
-                continue
-
-            current_category = category
-            if use_ollama_classify and ollama:
-                try:
-                    all_categories = Category.query.all()
-                    categories_info = [
-                        {
-                            'full_path': cat.get_full_path('/'),
-                            'description': cat.description or ''
-                        }
-                        for cat in all_categories if cat.level <= 2
-                    ]
-                    suggested_path = ollama.suggest_category(content, filename, categories_info)
-                    if suggested_path:
-                        suggested_cat = get_category_by_path(suggested_path.strip())
-                        if suggested_cat:
-                            current_category = suggested_cat
-                except Exception as e:
-                    print(f"AI 分類失敗: {e}")
-
-            wildcard = Wildcard(
-                content=content,
-                category_id=current_category.id,
-                source_file=filename,
-                translation_status='pending' if use_translation else 'skipped'
-            )
-            wildcards_to_import.append(wildcard)
-            db.session.add(wildcard)
-            imported += 1
+        wildcard = Wildcard(
+            content=content,
+            category_id=current_category.id,
+            source_file=filename,
+            translation_status='pending' if use_translation else 'skipped'
+        )
+        wildcards_to_import.append(wildcard)
+        db.session.add(wildcard)
+        imported += 1
 
     if use_translation and wildcards_to_import:
         try:
@@ -198,8 +189,112 @@ def import_txt_file(file_path, use_ollama_classify=False, use_translation=False,
     return {'imported': imported, 'skipped': skipped}
 
 
+def _collect_yaml_items(node, category_map, path=None):
+    """
+    Recursively walk the exported YAML structure to collect (category_name, item) pairs.
+    Matches the export structure: {parent: {child: [items]}} or {name: [items]}.
+    path is a list of keys leading to this node.
+    """
+    if path is None:
+        path = []
+
+    if isinstance(node, list):
+        cat_name = '_'.join(path) if path else 'misc'
+        for item in node:
+            if isinstance(item, str) and item.strip():
+                category_map.setdefault(cat_name, []).append(item.strip())
+    elif isinstance(node, dict):
+        for key, value in node.items():
+            _collect_yaml_items(value, category_map, path + [key])
+    elif isinstance(node, str) and node.strip():
+        cat_name = '_'.join(path[:-1]) if len(path) > 1 else 'misc'
+        category_map.setdefault(cat_name, []).append(node.strip())
+
+
+def _fix_yaml_wildcards(content: str) -> str:
+    """Quote list items that use {A|B|C} ImpactWildcard syntax, which YAML misparses as dicts."""
+    fixed = []
+    for line in content.splitlines(keepends=True):
+        stripped = line.lstrip()
+        if stripped.startswith('- {') and '|' in stripped:
+            indent = line[:len(line) - len(stripped)]
+            value = stripped[2:].rstrip('\n')
+            value = value.replace('\\', '\\\\').replace('"', '\\"')
+            fixed.append(f'{indent}- "{value}"\n')
+        else:
+            fixed.append(line)
+    return ''.join(fixed)
+
+
+def import_yaml_file(file_path, target_category_id=None, to_lowercase=False):
+    """
+    Import a YAML file matching the export structure.
+    If target_category_id is given, all items go to that category regardless of YAML keys.
+    Otherwise, YAML keys are matched to category names (e.g. parent_child).
+    """
+    errors = []
+    imported = 0
+    skipped = 0
+
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            raw = f.read()
+        fixed = _fix_yaml_wildcards(raw)
+        data = yaml.safe_load(fixed)
+    except Exception as e:
+        return {'imported': 0, 'skipped': 0, 'errors': [f'YAML 解析失敗: {e}']}
+
+    if data is None:
+        return {'imported': 0, 'skipped': 0, 'errors': ['YAML 檔案為空']}
+
+    if target_category_id:
+        target_cat = Category.query.get(target_category_id)
+        if not target_cat:
+            return {'imported': 0, 'skipped': 0, 'errors': [f'找不到分類 ID={target_category_id}']}
+
+        category_map = {}
+        _collect_yaml_items(data, category_map)
+        all_items = [item for items in category_map.values() for item in items]
+
+        for content in all_items:
+            if to_lowercase:
+                content = content.lower()
+            if not content:
+                continue
+            if Wildcard.query.filter_by(content=content).first():
+                skipped += 1
+                continue
+            db.session.add(Wildcard(content=content, category_id=target_cat.id))
+            imported += 1
+        db.session.commit()
+    else:
+        category_map = {}
+        _collect_yaml_items(data, category_map)
+
+        for cat_name, items in category_map.items():
+            cat = Category.query.filter_by(name=cat_name).first()
+            if not cat:
+                errors.append(f'找不到分類「{cat_name}」，跳過 {len(items)} 個項目')
+                skipped += len(items)
+                continue
+            for content in items:
+                if to_lowercase:
+                    content = content.lower()
+                if not content:
+                    continue
+                if Wildcard.query.filter_by(content=content).first():
+                    skipped += 1
+                    continue
+                db.session.add(Wildcard(content=content, category_id=cat.id))
+                imported += 1
+        db.session.commit()
+
+    return {'imported': imported, 'skipped': skipped, 'errors': errors}
+
+
 def import_from_directory(directory_path, use_ollama_classify=False, use_translation=False,
-                           recursive=True, target_category_id=None, use_comma_separated=False):
+                           recursive=True, target_category_id=None, use_comma_separated=False,
+                           to_lowercase=False):
     """
     從目錄匯入所有 TXT 檔案
 
@@ -210,6 +305,7 @@ def import_from_directory(directory_path, use_ollama_classify=False, use_transla
         recursive: 是否遞迴搜尋子目錄
         target_category_id: 手動指定的目標分類 ID
         use_comma_separated: 是否啟用逗號分隔格式
+        to_lowercase: 是否將內容全部轉為小寫
     """
     imported = 0
     skipped = 0
@@ -236,7 +332,8 @@ def import_from_directory(directory_path, use_ollama_classify=False, use_transla
                 use_ollama_classify=current_use_ollama_classify,
                 use_translation=use_translation,
                 target_category_id=target_category_id,
-                use_comma_separated=use_comma_separated
+                use_comma_separated=use_comma_separated,
+                to_lowercase=to_lowercase
             )
             imported += result['imported']
             skipped += result['skipped']
@@ -263,6 +360,7 @@ def api_import_upload():
     category_id = request.form.get('category_id', type=int)
     use_translation = request.form.get('translate', 'false').lower() == 'true'
     use_comma_separated = request.form.get('comma_separated', 'false').lower() == 'true'
+    to_lowercase = request.form.get('to_lowercase', 'false').lower() == 'true'
 
     filename = secure_filename(file.filename)
 
@@ -280,6 +378,12 @@ def api_import_upload():
                 extract_path = temp_path / 'extracted'
                 extract_path.mkdir()
                 with zipfile.ZipFile(saved_filepath, 'r') as zip_ref:
+                    # Validate ZIP entries to prevent zip-slip path traversal
+                    abs_extract = extract_path.resolve()
+                    for member in zip_ref.namelist():
+                        member_path = (abs_extract / member).resolve()
+                        if not str(member_path).startswith(str(abs_extract)):
+                            return jsonify({'error': f'ZIP 包含不安全的路徑: {member}'}), 400
                     zip_ref.extractall(extract_path)
 
                 total_imported, total_skipped, errors = import_from_directory(
@@ -287,7 +391,8 @@ def api_import_upload():
                     recursive=True,
                     target_category_id=category_id,
                     use_translation=use_translation,
-                    use_comma_separated=use_comma_separated
+                    use_comma_separated=use_comma_separated,
+                    to_lowercase=to_lowercase
                 )
 
             elif filename.lower().endswith('.txt'):
@@ -295,13 +400,24 @@ def api_import_upload():
                     str(saved_filepath),
                     target_category_id=category_id,
                     use_translation=use_translation,
-                    use_comma_separated=use_comma_separated
+                    use_comma_separated=use_comma_separated,
+                    to_lowercase=to_lowercase
                 )
                 total_imported = result.get('imported', 0)
                 total_skipped = result.get('skipped', 0)
 
+            elif filename.lower().endswith(('.yaml', '.yml')):
+                result = import_yaml_file(
+                    str(saved_filepath),
+                    target_category_id=category_id,
+                    to_lowercase=to_lowercase,
+                )
+                total_imported = result.get('imported', 0)
+                total_skipped = result.get('skipped', 0)
+                errors.extend(result.get('errors', []))
+
             else:
-                errors.append('不支援的檔案格式，請上傳 .txt 或 .zip 檔案')
+                errors.append('不支援的檔案格式，請上傳 .txt、.yaml 或 .zip 檔案')
 
             if not errors:
                 history = ImportHistory(
@@ -366,65 +482,79 @@ def api_import_history():
     return jsonify([h.to_dict() for h in history])
 
 
+def _build_yaml_structure(wildcards):
+    """
+    Build nested YAML dict from wildcards grouped by category name.
+
+    Category name convention: "parent_child" (e.g. clothing_dress)
+    → YAML structure: {clothing: {dress: [items]}}
+    → Wildcard syntax: __clothing/dress__
+
+    Categories without underscore stay flat:
+    → {universal: [items]}  → __universal__
+    """
+    nested = {}
+    for w in wildcards:
+        cat = w.category
+        name = cat.name if cat else 'uncategorized'
+        underscore = name.find('_')
+        if underscore != -1:
+            parent = name[:underscore]
+            child  = name[underscore + 1:]
+            nested.setdefault(parent, {})
+            nested[parent].setdefault(child, [])
+            nested[parent][child].append(w.content)
+        else:
+            nested.setdefault(name, [])
+            if isinstance(nested[name], list):
+                nested[name].append(w.content)
+            else:
+                # name collision: parent already has children, add as _items
+                nested[name].setdefault('_items', [])
+                nested[name]['_items'].append(w.content)
+    return nested
+
+
 @import_export_bp.route('/export/<format>')
 def api_export(format):
-    """匯出資料"""
-    if format not in ['txt', 'json', 'csv']:
-        return jsonify({'error': '不支援的格式'}), 400
+    """匯出資料 — 支援 txt / yaml"""
+    if format not in ['txt', 'yaml']:
+        return jsonify({'error': '不支援的格式，請使用 txt 或 yaml'}), 400
 
     category_id = request.args.get('category_id', type=int)
-    filename = request.args.get('filename', '')
+    filename    = request.args.get('filename', '').strip()
 
     query = Wildcard.query.filter_by(is_active=True)
     if category_id:
         query = query.filter_by(category_id=category_id)
-        category = Category.query.get(category_id)
-        category_name = category.name if category else 'unknown'
+        cat = Category.query.get(category_id)
+        category_name = cat.name if cat else 'unknown'
     else:
         category_name = 'all'
 
-    wildcards = query.all()
+    wildcards = query.order_by(Wildcard.content).all()
 
     if not filename:
         filename = f'wildcards_{category_name}'
 
-    if format == 'json':
-        output = json.dumps([w.to_dict() for w in wildcards], ensure_ascii=False, indent=2)
+    if format == 'txt':
+        output = '\n'.join(w.content for w in wildcards)
         return Response(
             output,
-            mimetype='application/json',
-            headers={'Content-Disposition': f'attachment;filename={filename}.json'}
-        )
-
-    elif format == 'txt':
-        lines = [w.content for w in wildcards]
-        output = '\n'.join(lines)
-        return Response(
-            output,
-            mimetype='text/plain',
+            mimetype='text/plain; charset=utf-8',
             headers={'Content-Disposition': f'attachment;filename={filename}.txt'}
         )
 
-    elif format == 'csv':
-        si = StringIO()
-        writer = csv.writer(si)
-        writer.writerow(['ID', 'Content', 'Content_ZH', 'Category', 'Source_File', 'Tags', 'Priority', 'Notes'])
-
-        for w in wildcards:
-            writer.writerow([
-                w.id,
-                w.content,
-                w.content_zh or '',
-                w.category.display_name if w.category else '',
-                w.source_file or '',
-                ', '.join([t.name for t in w.tags]) if hasattr(w, 'tags') and w.tags else '',
-                w.priority,
-                w.notes or ''
-            ])
-
-        output = si.getvalue()
+    elif format == 'yaml':
+        structure = _build_yaml_structure(wildcards)
+        output = yaml.dump(
+            structure,
+            allow_unicode=True,
+            default_flow_style=False,
+            sort_keys=True,
+        )
         return Response(
             output,
-            mimetype='text/csv',
-            headers={'Content-Disposition': f'attachment;filename={filename}.csv'}
+            mimetype='text/yaml; charset=utf-8',
+            headers={'Content-Disposition': f'attachment;filename={filename}.yaml'}
         )

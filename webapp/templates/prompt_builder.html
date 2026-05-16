@@ -1,1180 +1,1029 @@
 {% extends "base.html" %}
-
-{% block title %}提示詞構建器 - Wildcard 管理系統{% endblock %}
+{% block title %}提示詞建構器 - Wildcard Studio{% endblock %}
 
 {% block extra_css %}
 <style>
-    .prompt-builder-container {
-        display: flex;
-        gap: 15px;
-        height: calc(100vh - 150px);
-    }
+/* ── Layout ─────────────────────────────────────────────────── */
+.pb-wrap {
+    display: grid;
+    grid-template-columns: 270px 1fr 290px;
+    gap: 10px;
+    height: 100vh;
+    padding: .75rem 1.25rem;
+    overflow: hidden;
+}
 
-    .wildcard-panel {
-        flex: 0 0 280px;
-        background: #f8f9fa;
-        border-radius: 8px;
-        padding: 15px;
-        overflow-y: auto;
-        border: 1px solid #dee2e6;
-    }
+.pb-left, .pb-center, .pb-right { min-height: 0; }
 
-    .editor-panel {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        gap: 15px;
-    }
+.pb-left {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: var(--card-bg);
+    overflow: hidden;
+}
 
-    .preview-panel {
-        flex: 0 0 350px;
-        display: flex;
-        flex-direction: column;
-        gap: 15px;
-    }
+.pb-center {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
 
-    .category-group {
-        margin-bottom: 15px;
-    }
+.pb-right {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    overflow-y: auto;
+}
+.pb-right::-webkit-scrollbar { width: 4px; }
+.pb-right::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 2px; }
 
-    .category-header {
-        font-weight: 600;
-        padding: 8px 12px;
-        background: white;
-        border-radius: 6px;
-        cursor: pointer;
-        transition: all 0.2s;
-        border: 1px solid #dee2e6;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
+/* ── Tabs ───────────────────────────────────────────────────── */
+.pb-tab-bar {
+    display: flex;
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+.pb-tab-btn {
+    flex: 1;
+    padding: .5rem .25rem;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    font-size: .8rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all .15s;
+    font-family: inherit;
+    display: flex; align-items: center; justify-content: center; gap: .3rem;
+}
+.pb-tab-btn:hover { color: var(--text-primary); background: var(--content-bg); }
+.pb-tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
 
-    .category-header:hover {
-        background: #e9ecef;
-    }
+.pb-tab-pane { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
 
-    .category-header.active {
-        background: #0d6efd;
-        color: white;
-        border-color: #0d6efd;
-    }
+/* ── Wildcard panel ─────────────────────────────────────────── */
+.wc-filter-area {
+    padding: .5rem .6rem;
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+.main-category-nav { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: .4rem; }
+.main-category-btn {
+    font-size: .7rem; padding: .15rem .45rem;
+    background: var(--content-bg); border: 1px solid var(--border-color);
+    border-radius: 10px; cursor: pointer; color: var(--text-secondary);
+    transition: all .12s; font-family: inherit;
+}
+.main-category-btn.active,
+.main-category-btn:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
 
-    .wildcard-items {
-        margin-top: 8px;
-        padding-left: 10px;
-        max-height: 0;
-        overflow: hidden;
-        transition: max-height 0.3s ease;
-    }
+#categoryList {
+    flex: 1;
+    overflow-y: auto;
+    padding: .4rem .5rem;
+}
+#categoryList::-webkit-scrollbar { width: 3px; }
+#categoryList::-webkit-scrollbar-thumb { background: var(--border-color); }
 
-    .wildcard-items.show {
-        max-height: 500px;
-        overflow-y: auto;
-    }
+.cat-group-wrapper { margin-bottom: .3rem; }
 
-    .wildcard-item {
-        padding: 6px 10px;
-        margin: 4px 0;
-        background: white;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 0.9rem;
-        border: 1px solid #e0e0e0;
-        transition: all 0.2s;
-    }
+.category-header {
+    font-size: .8rem; padding: 4px 8px;
+    background: var(--card-bg); border-radius: 5px; cursor: pointer;
+    border: 1px solid var(--border-color);
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 2px; transition: all .12s;
+}
+.category-header:hover { background: var(--content-bg); }
+.category-header.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 
-    .wildcard-item:hover {
-        background: #e3f2fd;
-        border-color: #2196f3;
-        transform: translateX(3px);
-    }
+.category-badge {
+    background: var(--content-bg); color: var(--text-secondary);
+    border-radius: 8px; padding: 0 .3rem; font-size: .68rem; margin-left: .25rem;
+}
+.category-header.active .category-badge { background: rgba(255,255,255,.2); color: #fff; }
+.group-top-header .category-badge { background: rgba(217,119,6,.12); color: var(--accent); }
 
-    .wildcard-item .content {
-        font-weight: 500;
-        color: #333;
-    }
+.wildcard-items { max-height: 0; overflow: hidden; transition: max-height .25s ease; }
+.wildcard-items.show { max-height: 800px; }
 
-    .wildcard-item .content-zh {
-        font-size: 0.85rem;
-        color: #666;
-        margin-top: 2px;
-    }
+/* ── Danbooru tab ───────────────────────────────────────────── */
+.dan-search-area {
+    padding: .5rem .6rem;
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+#dan-grid {
+    flex: 1;
+    overflow-y: auto;
+}
+#dan-grid::-webkit-scrollbar { width: 3px; }
+#dan-grid::-webkit-scrollbar-thumb { background: var(--border-color); }
+.dan-grid-inner {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 3px;
+    padding: 3px;
+}
+.dan-thumb {
+    aspect-ratio: 1;
+    width: 100%;
+    object-fit: cover;
+    border-radius: 4px;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: border-color .12s, opacity .12s;
+}
+.dan-thumb:hover { border-color: var(--accent); }
+.dan-thumb.selected { border-color: var(--accent); }
 
-    #promptTextarea {
-        font-family: 'Courier New', monospace;
-        font-size: 14px;
-        line-height: 1.6;
-        resize: vertical;
-        min-height: 200px;
-    }
+.dan-tag-panel {
+    flex-shrink: 0;
+    border-top: 1px solid var(--border-color);
+    padding: .4rem .6rem;
+    max-height: 200px;
+    overflow-y: auto;
+}
+.tag-chip {
+    display: inline-block;
+    padding: .1rem .38rem;
+    border-radius: 4px;
+    font-size: .7rem;
+    margin: 1.5px;
+    cursor: pointer;
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    background: var(--content-bg);
+    transition: all .12s;
+}
+.tag-chip:hover { border-color: var(--accent); color: var(--accent); }
+.tag-chip.tg { border-color: #3b82f680; color: #3b82f6; }
+.tag-chip.tc { border-color: #10b98180; color: #10b981; }
+.tag-chip.ta { border-color: #f59e0b80; color: #f59e0b; }
 
-    .preview-box {
-        background: #f8f9fa;
-        border: 1px solid #dee2e6;
-        border-radius: 8px;
-        padding: 15px;
-        flex: 1;
-        overflow-y: auto;
-    }
+/* ── Editor ─────────────────────────────────────────────────── */
+.pb-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: center;
+    padding: 2px 0;
+    flex-shrink: 0;
+}
+.pb-toolbar .btn { font-size: .75rem; padding: .2rem .45rem; }
+.pb-toolbar .vr { height: 1.2rem; align-self: center; }
 
-    .preview-item {
-        background: white;
-        padding: 12px;
-        border-radius: 6px;
-        margin-bottom: 10px;
-        border-left: 4px solid #0d6efd;
-    }
+.pb-editor-card {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: var(--card-bg);
+    overflow: hidden;
+    min-height: 0;
+}
+#promptTextarea {
+    flex: 1;
+    resize: none;
+    border: none;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: .88rem;
+    line-height: 1.65;
+    padding: .75rem;
+    outline: none;
+    min-height: 0;
+}
+.pb-footer-bar {
+    padding: .3rem .75rem;
+    border-top: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
 
-    .preview-label {
-        font-size: 0.85rem;
-        font-weight: 600;
-        color: #666;
-        margin-bottom: 5px;
-    }
+/* ── Right panel ────────────────────────────────────────────── */
+.preview-box {
+    max-height: 160px;
+    overflow-y: auto;
+    font-size: .8rem;
+}
+.preview-box::-webkit-scrollbar { width: 3px; }
 
-    .preview-text {
-        font-family: 'Courier New', monospace;
-        font-size: 13px;
-        color: #333;
-        white-space: pre-wrap;
-        word-break: break-word;
-    }
+/* Syntax help collapsible */
+.syntax-toggle {
+    cursor: pointer;
+    user-select: none;
+}
 
-    .syntax-help {
-        background: #fff3cd;
-        border: 1px solid #ffc107;
-        border-radius: 6px;
-        padding: 12px;
-        margin-bottom: 15px;
-        font-size: 0.85rem;
-    }
-
-    .syntax-help code {
-        background: #fff;
-        padding: 2px 6px;
-        border-radius: 3px;
-        font-weight: 600;
-        color: #d63384;
-    }
-
-    .btn-insert-syntax {
-        font-size: 0.85rem;
-        padding: 4px 10px;
-    }
-
-    .toolbar {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-        margin-bottom: 10px;
-    }
-
-    .category-badge {
-        display: inline-block;
-        padding: 2px 8px;
-        border-radius: 12px;
-        font-size: 0.75rem;
-        background: #e9ecef;
-        color: #495057;
-        margin-left: 8px;
-    }
-
-    .main-category-nav {
-        margin-bottom: 15px;
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-    }
-
-    .main-category-btn {
-        flex: 1 1 calc(50% - 3px);
-        padding: 8px 10px;
-        font-size: 0.85rem;
-        border: 1px solid #dee2e6;
-        background: white;
-        border-radius: 6px;
-        cursor: pointer;
-        transition: all 0.2s;
-        text-align: center;
-        font-weight: 500;
-    }
-
-    .main-category-btn:hover {
-        background: #e9ecef;
-        border-color: #0d6efd;
-    }
-
-    .main-category-btn.active {
-        background: #0d6efd;
-        color: white;
-        border-color: #0d6efd;
-    }
-
-    .main-category-btn .badge {
-        display: inline-block;
-        background: rgba(0,0,0,0.1);
-        padding: 2px 6px;
-        border-radius: 10px;
-        font-size: 0.7rem;
-        margin-left: 4px;
-    }
-
-    .loading-spinner {
-        display: inline-block;
-        width: 1rem;
-        height: 1rem;
-        border: 2px solid #f3f3f3;
-        border-top: 2px solid #0d6efd;
-        border-radius: 50%;
-        animation: spin 1s linear infinite;
-    }
-
-    @keyframes spin {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
-    }
+/* Builder images */
+.builder-img-thumb {
+    width: 100%;
+    aspect-ratio: 1;
+    object-fit: cover;
+    border-radius: 6px;
+    cursor: zoom-in;
+}
 </style>
 {% endblock %}
 
-{% block content %}
-<div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h1><i class="bi bi-pencil-square"></i> 提示詞構建器</h1>
-        <div>
-            <button class="btn btn-outline-secondary btn-sm" onclick="showHelpModal()">
-                <i class="bi bi-question-circle"></i> 語法說明
-            </button>
-        </div>
+{% block fullpage %}
+<div class="pb-wrap">
+
+  <!-- ═══════ LEFT: Wildcard / Danbooru ═══════ -->
+  <div class="pb-left">
+
+    <div class="pb-tab-bar">
+      <button class="pb-tab-btn active" id="tab-btn-wc" onclick="switchPbTab('wc')">
+        <i class="bi bi-collection"></i> Wildcard
+      </button>
+      <button class="pb-tab-btn" id="tab-btn-dan" onclick="switchPbTab('dan')">
+        <i class="bi bi-images"></i> Danbooru
+      </button>
     </div>
 
-    <div class="prompt-builder-container">
-        <!-- 左側：Wildcard 分類面板 -->
-        <div class="wildcard-panel">
-            <h5 class="mb-3">
-                <i class="bi bi-collection"></i> Wildcard 分類
-                <button class="btn btn-sm btn-outline-primary float-end" onclick="loadWildcards()">
-                    <i class="bi bi-arrow-clockwise"></i>
-                </button>
-            </h5>
-
-            <!-- 大分類導航 -->
-            <div class="main-category-nav" id="mainCategoryNav">
-                <button class="main-category-btn active" data-category="all" onclick="filterByMainCategory('all', this)">
-                    <i class="bi bi-grid-3x3-gap"></i> 全部
-                </button>
-                <button class="main-category-btn" data-category="Universal" onclick="filterByMainCategory('Universal', this)">
-                    <i class="bi bi-star"></i> 通用
-                </button>
-                <button class="main-category-btn" data-category="character" onclick="filterByMainCategory('character', this)">
-                    <i class="bi bi-person"></i> 角色
-                </button>
-                <button class="main-category-btn" data-category="hair" onclick="filterByMainCategory('hair', this)">
-                    <i class="bi bi-hr"></i> 頭髮
-                </button>
-                <button class="main-category-btn" data-category="face" onclick="filterByMainCategory('face', this)">
-                    <i class="bi bi-emoji-smile"></i> 臉部
-                </button>
-                <button class="main-category-btn" data-category="clothing" onclick="filterByMainCategory('clothing', this)">
-                    <i class="bi bi-bag"></i> 服裝
-                </button>
-                <button class="main-category-btn" data-category="pose" onclick="filterByMainCategory('pose', this)">
-                    <i class="bi bi-person-arms-up"></i> 動作
-                </button>
-                <button class="main-category-btn" data-category="environment" onclick="filterByMainCategory('environment', this)">
-                    <i class="bi bi-tree"></i> 環境
-                </button>
-                <button class="main-category-btn" data-category="camera" onclick="filterByMainCategory('camera', this)">
-                    <i class="bi bi-camera"></i> 構圖
-                </button>
-                <button class="main-category-btn" data-category="art_style" onclick="filterByMainCategory('art_style', this)">
-                    <i class="bi bi-palette"></i> 風格
-                </button>
-                <button class="main-category-btn" data-category="Fanfiction" onclick="filterByMainCategory('Fanfiction', this)">
-                    <i class="bi bi-book"></i> 同人
-                </button>
-                <button class="main-category-btn" data-category="misc" onclick="filterByMainCategory('misc', this)">
-                    <i class="bi bi-three-dots"></i> 其他
-                </button>
-            </div>
-
-            <div class="input-group mb-3">
-                <input type="text" id="categorySearch" class="form-control form-control-sm"
-                       placeholder="搜尋分類..." onkeyup="filterCategories()">
-                <button class="btn btn-outline-secondary btn-sm" onclick="document.getElementById('categorySearch').value=''; filterCategories();">
-                    <i class="bi bi-x"></i>
-                </button>
-            </div>
-
-            <div id="categoryList">
-                <p class="text-muted text-center">載入中...</p>
-            </div>
+    <!-- Wildcard tab -->
+    <div id="pane-wc" class="pb-tab-pane">
+      <div class="wc-filter-area">
+        <div class="main-category-nav" id="mainCategoryNav">
+          <button class="main-category-btn active" data-group="all" onclick="filterByGroup('all',this)">
+            <i class="bi bi-grid-3x3-gap"></i> 全部
+          </button>
         </div>
-
-        <!-- 中間：編輯器面板 -->
-        <div class="editor-panel">
-            <div class="syntax-help">
-                <strong><i class="bi bi-lightbulb"></i> 快速提示：</strong><br>
-                • 使用 <code>__category__</code> 插入隨機 wildcard（如 <code>__anime_artists__</code>）<br>
-                • 使用 <code>{option1|option2|option3}</code> 在選項中隨機選擇<br>
-                • 使用 <code>|</code> 分隔選項，<code>^</code> 增加權重（如 <code>beautiful^2</code>）<br>
-                • 使用 <code>{$var=value}</code> 定義變數，用 <code>$var</code> 引用（確保一致性）<br>
-                • 點擊左側項目快速插入分類語法，或使用工具欄按鈕插入特殊字符
-            </div>
-
-            <div class="toolbar">
-                <button class="btn btn-sm btn-outline-primary btn-insert-syntax" onclick="insertSyntax('__', '__')">
-                    <i class="bi bi-code"></i> 插入 __category__
-                </button>
-                <button class="btn btn-sm btn-outline-primary btn-insert-syntax" onclick="insertSyntax('{', '}')">
-                    <i class="bi bi-braces"></i> 插入 {選項|選項}
-                </button>
-                <button class="btn btn-sm btn-outline-secondary btn-insert-syntax" onclick="insertCharacter('|')">
-                    <i class="bi bi-three-dots-vertical"></i> 插入 |
-                </button>
-                <button class="btn btn-sm btn-outline-secondary btn-insert-syntax" onclick="insertCharacter('^')">
-                    <i class="bi bi-caret-up-fill"></i> 插入 ^
-                </button>
-                <button class="btn btn-sm btn-outline-danger btn-insert-syntax" onclick="insertCharacter(' BREAK ')">
-                    <i class="bi bi-pause-circle"></i> 插入 BREAK
-                </button>
-                <button class="btn btn-sm btn-outline-info btn-insert-syntax" onclick="insertVariableDefinition()">
-                    <i class="bi bi-coin"></i> 插入變數定義
-                </button>
-                <button class="btn btn-sm btn-outline-info btn-insert-syntax" onclick="insertVariableReference()">
-                    <i class="bi bi-currency-dollar"></i> 插入變數引用
-                </button>
-                <button class="btn btn-sm btn-outline-secondary" onclick="clearPrompt()">
-                    <i class="bi bi-trash"></i> 清空
-                </button>
-                <button class="btn btn-sm btn-outline-success" onclick="copyToClipboard()">
-                    <i class="bi bi-clipboard"></i> 複製
-                </button>
-                <div class="btn-group ms-2">
-                    <button class="btn btn-sm btn-outline-warning" onclick="showSaveTemplateModal()">
-                        <i class="bi bi-save"></i> 保存模板
-                    </button>
-                    <button class="btn btn-sm btn-outline-info" onclick="showLoadTemplateModal()">
-                        <i class="bi bi-folder-open"></i> 載入模板
-                    </button>
-                </div>
-            </div>
-
-            <div class="card flex-fill">
-                <div class="card-header">
-                    <i class="bi bi-pencil"></i> 提示詞編輯器
-                </div>
-                <div class="card-body p-0">
-                    <textarea id="promptTextarea" class="form-control border-0"
-                              placeholder="在此輸入或構建您的提示詞...&#10;&#10;範例：&#10;a beautiful __anime_artists__ style portrait of a {girl|woman|lady}, __adjectives__, high quality"></textarea>
-                </div>
-                <div class="card-footer">
-                    <small class="text-muted">
-                        字數：<span id="charCount">0</span> |
-                        行數：<span id="lineCount">0</span>
-                    </small>
-                </div>
-            </div>
+        <div class="input-group input-group-sm">
+          <input id="categorySearch" type="text" class="form-control" placeholder="搜尋分類..." onkeyup="filterCategories()">
+          <button class="btn btn-outline-secondary" onclick="categorySearch.value=''; filterCategories();">
+            <i class="bi bi-x"></i>
+          </button>
         </div>
-
-        <!-- 右側：預覽面板 -->
-        <div class="preview-panel">
-            <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <span><i class="bi bi-eye"></i> 即時預覽</span>
-                    <button class="btn btn-sm btn-primary" onclick="generatePreview()">
-                        <i class="bi bi-arrow-repeat"></i> 重新生成
-                    </button>
-                </div>
-                <div class="card-body">
-                    <div id="previewContainer">
-                        <p class="text-muted text-center">點擊「重新生成」查看隨機化結果</p>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card flex-fill">
-                <div class="card-header">
-                    <i class="bi bi-card-list"></i> 多次生成結果
-                    <button class="btn btn-sm btn-outline-primary float-end" onclick="generateMultiplePreviews(5)">
-                        生成 5 次
-                    </button>
-                </div>
-                <div class="card-body preview-box" id="multiplePreviewsContainer">
-                    <p class="text-muted text-center">點擊上方按鈕生成多個隨機結果</p>
-                </div>
-            </div>
-        </div>
+      </div>
+      <div id="categoryList"><p class="text-muted text-center mt-3" style="font-size:.83rem;">載入中...</p></div>
     </div>
+
+    <!-- Danbooru tab -->
+    <div id="pane-dan" class="pb-tab-pane d-none">
+      <div class="dan-search-area">
+        <div class="input-group input-group-sm">
+          <input id="dan-search" type="text" class="form-control" placeholder="輸入 tag 搜尋 (空白=最新)"
+                 onkeydown="if(event.key==='Enter') danSearch()">
+          <button class="btn btn-primary" onclick="danSearch()">
+            <i class="bi bi-search"></i>
+          </button>
+        </div>
+        <div class="d-flex align-items-center justify-content-between mt-1">
+          <small class="text-muted" id="dan-status" style="font-size:.7rem;"></small>
+          <div id="dan-pagination" class="d-flex gap-1"></div>
+        </div>
+      </div>
+      <div id="dan-grid">
+        <div class="text-muted text-center mt-4 px-3" style="font-size:.8rem;">
+          <i class="bi bi-images" style="font-size:1.5rem; opacity:.3;"></i>
+          <div class="mt-1">輸入 tag 後按搜尋</div>
+        </div>
+      </div>
+      <div id="dan-tag-panel" class="dan-tag-panel d-none">
+        <div class="d-flex align-items-center mb-1 gap-2">
+          <small class="fw-semibold flex-grow-1" style="font-size:.75rem;">提取的 Tags</small>
+          <button class="btn btn-sm btn-primary py-0 px-2" style="font-size:.72rem;" onclick="addAllDanTags()">
+            <i class="bi bi-plus-lg"></i> 全部加入
+          </button>
+        </div>
+        <div id="dan-tags-content"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ═══════ CENTER: Editor ═══════ -->
+  <div class="pb-center">
+
+    <!-- Syntax quick ref (collapsible) -->
+    <div class="card" style="flex-shrink:0;">
+      <div class="card-header py-2 syntax-toggle d-flex align-items-center" onclick="toggleSyntaxHelp()">
+        <i class="bi bi-lightbulb text-warning me-2" style="font-size:.85rem;"></i>
+        <span class="fw-semibold" style="font-size:.8rem;">語法快速參考</span>
+        <i class="bi bi-chevron-down ms-auto" id="syntax-chevron" style="font-size:.8rem;"></i>
+      </div>
+      <div id="syntax-body" class="d-none card-body py-2" style="font-size:.75rem; line-height:1.7;">
+        <code>__category__</code> 隨機選一 &nbsp;·&nbsp;
+        <code>{a|b|c}</code> 選一 &nbsp;·&nbsp;
+        <code>{2$$a|b|c}</code> 選2個 &nbsp;·&nbsp;
+        <code>3#__cat__</code> 重複3次 &nbsp;·&nbsp;
+        <code>{$x=__cat__}</code> 定義變數 &nbsp;·&nbsp;
+        <code>$x</code> 引用 &nbsp;·&nbsp;
+        <code>BREAK</code> 段落 &nbsp;·&nbsp;
+        <button class="btn btn-link btn-sm p-0" style="font-size:.72rem;" onclick="showHelpModal()">完整說明</button>
+      </div>
+    </div>
+
+    <!-- Toolbar -->
+    <div class="pb-toolbar">
+      <button class="btn btn-sm btn-outline-secondary" onclick="insertSyntax('__','__')" title="插入 __category__"><i class="bi bi-code"></i></button>
+      <button class="btn btn-sm btn-outline-secondary" onclick="insertSyntax('{','}')" title="{a|b}"><i class="bi bi-braces"></i></button>
+      <button class="btn btn-sm btn-outline-secondary" onclick="insertCharacter('|')" title="插入 |"> | </button>
+      <button class="btn btn-sm btn-outline-secondary" onclick="insertCharacter(' BREAK ')" title="BREAK"><i class="bi bi-pause-circle"></i></button>
+      <button class="btn btn-sm btn-outline-secondary" onclick="insertVariableDefinition()" title="定義變數"><i class="bi bi-coin"></i></button>
+      <button class="btn btn-sm btn-outline-secondary" onclick="insertVariableReference()" title="引用變數"><i class="bi bi-currency-dollar"></i></button>
+      <div class="vr"></div>
+      <button class="btn btn-sm btn-outline-danger" onclick="clearPrompt()" title="清空"><i class="bi bi-trash"></i></button>
+      <button class="btn btn-sm btn-outline-secondary" onclick="copyToClipboard()"><i class="bi bi-clipboard"></i> 複製</button>
+      <div class="vr"></div>
+      <button class="btn btn-sm btn-outline-warning" onclick="showSaveTemplateModal()" title="存模板"><i class="bi bi-save2"></i></button>
+      <button class="btn btn-sm btn-outline-info" onclick="showLoadTemplateModal()" title="載模板"><i class="bi bi-folder-open"></i></button>
+      <button class="btn btn-sm btn-outline-secondary ms-auto" onclick="showHelpModal()"><i class="bi bi-question-circle"></i></button>
+    </div>
+
+    <!-- Textarea -->
+    <div class="pb-editor-card">
+      <textarea id="promptTextarea"
+        placeholder="在此輸入或構建提示詞...&#10;&#10;範例：a beautiful __anime_artists__ style portrait, {1girl|1woman}, __lighting__"></textarea>
+      <div class="pb-footer-bar">
+        <small class="text-muted" style="font-size:.75rem;">
+          字數：<span id="charCount">0</span> &nbsp;|&nbsp; 行數：<span id="lineCount">0</span>
+        </small>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ═══════ RIGHT: Preview + ComfyUI ═══════ -->
+  <div class="pb-right">
+
+    <!-- Single preview -->
+    <div class="card" style="flex-shrink:0;">
+      <div class="card-header py-2 d-flex align-items-center">
+        <span class="fw-semibold" style="font-size:.82rem;"><i class="bi bi-eye me-1"></i>即時預覽</span>
+        <button class="btn btn-sm btn-primary ms-auto py-0 px-2" onclick="generatePreview()">
+          <i class="bi bi-arrow-repeat"></i>
+        </button>
+      </div>
+      <div class="card-body py-2" style="font-size:.82rem;">
+        <div id="previewContainer" class="text-muted text-center" style="font-size:.78rem;">點擊重新生成</div>
+      </div>
+    </div>
+
+    <!-- Multiple previews -->
+    <div class="card" style="flex-shrink:0;">
+      <div class="card-header py-2 d-flex align-items-center">
+        <span class="fw-semibold" style="font-size:.82rem;"><i class="bi bi-card-list me-1"></i>多次生成</span>
+        <div class="ms-auto d-flex gap-1">
+          <button class="btn btn-sm btn-outline-secondary py-0 px-2" onclick="generateMultiplePreviews(3)" style="font-size:.72rem;">3次</button>
+          <button class="btn btn-sm btn-outline-primary py-0 px-2" onclick="generateMultiplePreviews(5)" style="font-size:.72rem;">5次</button>
+        </div>
+      </div>
+      <div class="card-body py-2 preview-box" id="multiplePreviewsContainer">
+        <p class="text-muted text-center mb-0" style="font-size:.78rem;">點擊上方按鈕生成</p>
+      </div>
+    </div>
+
+    <!-- ComfyUI direct execution -->
+    <div class="card" style="flex-shrink:0;">
+      <div class="card-header py-2">
+        <span class="fw-semibold" style="font-size:.82rem;"><i class="bi bi-cpu me-1 text-primary"></i>ComfyUI 執行</span>
+      </div>
+      <div class="card-body py-2">
+        <select id="comfy-wf-select" class="form-select form-select-sm mb-2">
+          <option value="">— 選擇工作流 —</option>
+        </select>
+        <div class="d-flex gap-1 mb-2">
+          <button class="btn btn-success btn-sm flex-grow-1" onclick="runFromBuilder()">
+            <i class="bi bi-play-fill"></i> 執行
+          </button>
+          <button class="btn btn-outline-secondary btn-sm" id="builder-run-stop" style="display:none;" onclick="stopBuilderPoll()">
+            <i class="bi bi-stop-fill"></i>
+          </button>
+          <a href="/comfy-workflows" class="btn btn-outline-secondary btn-sm" title="管理工作流">
+            <i class="bi bi-box-arrow-up-right"></i>
+          </a>
+        </div>
+        <div id="builder-run-status" class="text-muted" style="font-size:.75rem;"></div>
+        <div id="builder-run-error" class="text-danger d-none" style="font-size:.75rem;"></div>
+        <div id="builder-images" class="row g-1 mt-1"></div>
+      </div>
+    </div>
+
+  </div>
 </div>
 
-<!-- 語法說明 Modal -->
+<!-- ── Help modal ── -->
 <div class="modal fade" id="helpModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">
-                    <i class="bi bi-book"></i> Wildcard 語法說明
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <h6>基本語法</h6>
-                <table class="table table-bordered">
-                    <thead>
-                        <tr>
-                            <th>語法</th>
-                            <th>說明</th>
-                            <th>範例</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td><code>__category__</code></td>
-                            <td>從指定分類中隨機選擇一個項目</td>
-                            <td><code>__anime_artists__</code> → 隨機選擇一位動漫藝術家</td>
-                        </tr>
-                        <tr>
-                            <td><code>{opt1|opt2|opt3}</code></td>
-                            <td>從多個選項中隨機選擇一個</td>
-                            <td><code>{red|blue|green}</code> → 隨機選擇一種顏色</td>
-                        </tr>
-                        <tr>
-                            <td><code>{$var=value}</code></td>
-                            <td>定義變數（可包含 wildcard 或選項語法）</td>
-                            <td><code>{$style=__art_style__}</code> → 將隨機風格存入變數</td>
-                        </tr>
-                        <tr>
-                            <td><code>$var</code></td>
-                            <td>引用變數（使用已定義的變數值）</td>
-                            <td><code>$style</code> → 使用之前定義的風格</td>
-                        </tr>
-                        <tr>
-                            <td><code>|</code></td>
-                            <td>選項分隔符（用於分隔多個選項）</td>
-                            <td><code>red|blue|green</code> → 在 {} 中使用</td>
-                        </tr>
-                        <tr>
-                            <td><code>^</code></td>
-                            <td>強調符號（提高權重或優先級）</td>
-                            <td><code>beautiful^2</code> → 增強「beautiful」的權重</td>
-                        </tr>
-                    </tbody>
-                </table>
-
-                <h6 class="mt-4">進階用法</h6>
-                <div class="alert alert-info">
-                    <strong>巢狀使用：</strong><br>
-                    <code>a beautiful __anime_artists__ style {portrait|illustration} of a {girl|woman}</code><br>
-                    <br>
-                    <strong>多個 wildcards：</strong><br>
-                    <code>__adjectives__ __creatures__, __art_style__, __lighting__</code><br>
-                    <br>
-                    <strong>使用變數確保一致性：</strong><br>
-                    <code>{$style=__art_style__} a $style artwork, painted in $style manner</code><br>
-                    <small class="text-muted">→ 確保兩處使用相同的藝術風格</small>
-                </div>
-
-                <h6 class="mt-4">Adaptive Prompts 進階語法</h6>
-                <div class="alert alert-success">
-                    <p class="mb-2"><strong>📦 多重選擇語法：</strong></p>
-                    <code>{5$$__fruit__}</code> → 從 fruit 中隨機選擇 5 個項目<br>
-                    <code>{2-4$$__animal__|__color__}</code> → 選擇 2-4 個項目<br>
-                    <small class="text-muted">範例輸出: apple, mango, kiwi, orange, banana</small>
-
-                    <p class="mb-2 mt-3"><strong>🔗 自定義分隔符：</strong></p>
-                    <code>{3$$ and $$__animal__}</code> → 使用 "and" 連接<br>
-                    <code>{3$$ $$__fruit__}</code> → 使用空格連接<br>
-                    <small class="text-muted">範例輸出: sheep and cat and dog</small>
-
-                    <p class="mb-2 mt-3"><strong>⚖️ 機率權重：</strong></p>
-                    在 wildcard 檔案中使用 <code>%80%</code> 控制出現機率<br>
-                    <pre class="bg-white p-2 border rounded small mt-1"><code>%80% common
-%10% uncommon
-rare          # 預設為 1
-ultrarare %0.1%</code></pre>
-
-                    <p class="mb-2 mt-3"><strong>📁 資料夾 Globbing：</strong></p>
-                    <code>__colors/*__</code> → 從 colors 資料夾中隨機選擇任一檔案<br>
-                    <code>__colors*__</code> → 從任何以 "colors" 開頭的檔案<br>
-                    <code>__colors__</code> → 只從 colors.txt 讀取<br>
-
-                    <p class="mb-2 mt-3"><strong>#️⃣ 註解：</strong></p>
-                    <code>## 這是註解 ## 實際內容</code> → 輸出: 實際內容<br>
-                    <small class="text-muted">註解不會出現在最終輸出中</small>
-
-                    <p class="mb-2 mt-3"><strong>⚡ Adaptive 變數語法：</strong></p>
-                    <code>__fruit^a__</code> → 賦值給變數 a<br>
-                    <code>__^a__</code> → 讀取變數 a<br>
-                    <code>__^a*__</code> → 使用 glob 匹配變數名<br>
-                    <code>{option1|option2}^var1^var2^var3</code> → 唯一變數賦值<br>
-                    <small class="text-muted">適用於 ComfyUI Adaptive Prompts 節點</small>
-                </div>
-
-                <h6 class="mt-4">完整範例</h6>
-                <pre class="bg-light p-3 border rounded"><code>a {beautiful|stunning|gorgeous} __anime_artists__ style portrait of a {girl|woman|lady},
-__adjectives__, __lighting__, {highly detailed|ultra detailed|4k|8k},
-{masterpiece|high quality|best quality}</code></pre>
-
-                <h6 class="mt-4">進階範例：多重選擇 + 自定義分隔符</h6>
-                <pre class="bg-light p-3 border rounded"><code>masterpiece, {2$$__shot__|__canvas__}, __scene_forest__, __quality__
-## 可能輸出: masterpiece, blue canvas, wideshot, magnificent forest, high-quality ##</code></pre>
-
-                <h6 class="mt-4">變數使用範例</h6>
-                <pre class="bg-light p-3 border rounded"><code>{$artist=__anime_artists__} {$subject={girl|woman|lady}}
-a beautiful portrait of a $subject by $artist,
-$artist style, masterpiece, highly detailed</code></pre>
-                <small class="text-muted">此範例會確保藝術家名稱在多處保持一致</small>
-
-                <h6 class="mt-4">Adaptive Prompts 變數範例</h6>
-                <pre class="bg-light p-3 border rounded"><code>## 定義變數 ##
-Fruit: __fruit^myfruit__
-Color: __color^mycolor__
-
-## 使用變數 ##
-A __^mycolor__ __^myfruit__ on the table</code></pre>
-                <small class="text-muted">適用於 ComfyUI 中使用 Adaptive Prompts 節點</small>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>
-            </div>
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-book me-2"></i>Wildcard 語法說明</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" style="font-size:.88rem;">
+        <table class="table table-sm table-bordered">
+          <thead class="table-light"><tr><th>語法</th><th>說明</th><th>範例</th></tr></thead>
+          <tbody>
+            <tr><td><code>__category__</code></td><td>從分類中隨機選一</td><td><code>__artists__</code></td></tr>
+            <tr><td><code>{a|b|c}</code></td><td>隨機選一選項</td><td><code>{red|blue|green}</code></td></tr>
+            <tr><td><code>{2$$a|b|c}</code></td><td>隨機選2個</td><td><code>{2$$__fruit__}</code></td></tr>
+            <tr><td><code>{3$$ and $$a|b}</code></td><td>自訂分隔符</td><td>用 and 連接3個</td></tr>
+            <tr><td><code>3#__cat__</code></td><td>重複使用3次</td><td><code>3#__flower__</code></td></tr>
+            <tr><td><code>{$x=__cat__}</code></td><td>定義變數</td><td>賦值給 x</td></tr>
+            <tr><td><code>$x</code></td><td>引用變數</td><td>使用 x 的值</td></tr>
+            <tr><td><code>BREAK</code></td><td>段落分隔</td><td>分段權重</td></tr>
+          </tbody>
+        </table>
+        <div class="alert alert-success mt-2 mb-0" style="font-size:.82rem;">
+          <strong>完整範例：</strong><br>
+          <code>a beautiful __anime_artists__ style portrait of a {girl|woman}, __adjectives__, __lighting__, masterpiece</code>
         </div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">關閉</button>
+      </div>
     </div>
+  </div>
 </div>
 
-<!-- 保存模板 Modal -->
+<!-- ── Save template modal ── -->
 <div class="modal fade" id="saveTemplateModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">保存提示詞模板</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <form id="saveTemplateForm">
-                    <div class="mb-3">
-                        <label for="templateName" class="form-label">模板名稱 <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" id="templateName" required placeholder="例如：人物肖像基礎模板">
-                    </div>
-                    <div class="mb-3">
-                        <label for="templateDescription" class="form-label">描述</label>
-                        <textarea class="form-control" id="templateDescription" rows="2" placeholder="（選填）簡短描述這個模板的用途"></textarea>
-                    </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                <button type="button" class="btn btn-primary" onclick="saveTemplate()">保存</button>
-            </div>
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">儲存模板</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label fw-semibold">名稱 <span class="text-danger">*</span></label>
+          <input type="text" class="form-control" id="templateName" placeholder="例如：人物肖像基礎">
         </div>
+        <div class="mb-0">
+          <label class="form-label fw-semibold">描述</label>
+          <textarea class="form-control" id="templateDescription" rows="2" placeholder="（選填）"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">取消</button>
+        <button type="button" class="btn btn-primary btn-sm" onclick="saveTemplate()">儲存</button>
+      </div>
     </div>
+  </div>
 </div>
 
-<!-- 載入模板 Modal -->
+<!-- ── Load template modal ── -->
 <div class="modal fade" id="loadTemplateModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">載入提示詞模板</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <div id="templateListContainer">
-                    <p class="text-center text-muted">載入中...</p>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>
-            </div>
-        </div>
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">載入模板</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="templateListContainer"><p class="text-center text-muted">載入中...</p></div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">關閉</button>
+      </div>
     </div>
+  </div>
 </div>
-{% endblock %}
+
+<!-- ── Image zoom modal ── -->
+<div class="modal fade" id="imgZoomModal" tabindex="-1">
+  <div class="modal-dialog modal-xl modal-dialog-centered">
+    <div class="modal-content bg-dark">
+      <div class="modal-body text-center p-1">
+        <img id="zoom-img" src="" class="img-fluid" style="max-height:90vh;">
+      </div>
+      <div class="modal-footer border-secondary py-1">
+        <a id="zoom-dl" href="#" download class="btn btn-outline-light btn-sm"><i class="bi bi-download"></i></a>
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">關閉</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock fullpage %}
 
 {% block extra_js %}
 <script>
+// ─── State ───────────────────────────────────────────────────
 let allCategories = [];
-let helpModal;
-let currentMainCategory = 'all';
-let categoryNameToId = {}; // 分類名稱到 ID 的映射
+let currentGroup  = 'all';
+let helpModal, saveModal, loadModal;
 
+// Danbooru state
+let danPage        = 1;
+let danCurrentTags = '';
+let danSelectedPost = null;
+
+// Builder ComfyUI state
+let builderPollTimer = null;
+let builderJobId     = null;
+let comfyWorkflows   = [];
+
+// ─── Boot ────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
     helpModal = new bootstrap.Modal(document.getElementById('helpModal'));
-    loadWildcards();
+    saveModal = new bootstrap.Modal(document.getElementById('saveTemplateModal'));
+    loadModal = new bootstrap.Modal(document.getElementById('loadTemplateModal'));
 
-    // 監聽文本框變化以更新統計
-    const textarea = document.getElementById('promptTextarea');
-    textarea.addEventListener('input', updateStats);
+    document.getElementById('promptTextarea').addEventListener('input', updateStats);
+    loadWildcards();
+    loadComfyWorkflows();
 });
 
+// ─── Tab switching ────────────────────────────────────────────
+function switchPbTab(tab) {
+    const isWc = tab === 'wc';
+    document.getElementById('pane-wc').classList.toggle('d-none', !isWc);
+    document.getElementById('pane-dan').classList.toggle('d-none', isWc);
+    document.getElementById('tab-btn-wc').classList.toggle('active', isWc);
+    document.getElementById('tab-btn-dan').classList.toggle('active', !isWc);
+}
+
+// ─── Syntax help toggle ───────────────────────────────────────
+function toggleSyntaxHelp() {
+    const body = document.getElementById('syntax-body');
+    const icon = document.getElementById('syntax-chevron');
+    const hidden = body.classList.toggle('d-none');
+    icon.className = hidden ? 'bi bi-chevron-down ms-auto' : 'bi bi-chevron-up ms-auto';
+    icon.style.fontSize = '.8rem';
+}
+
+// ─── Wildcard loading ─────────────────────────────────────────
 async function loadWildcards() {
     try {
-        const response = await fetch('/api/prompt-builder/wildcards');
-        allCategories = await response.json();
+        const r = await fetch('/api/prompt-builder/wildcards');
+        allCategories = await r.json();
         renderCategories(allCategories);
-    } catch (error) {
-        console.error('載入 wildcards 失敗:', error);
+    } catch {
         document.getElementById('categoryList').innerHTML =
-            '<p class="text-danger">載入失敗，請重試</p>';
+            '<p class="text-danger text-center" style="font-size:.82rem;">載入失敗</p>';
     }
+}
+
+function buildGroups(categories) {
+    const groups = new Map(), roots = [];
+    for (const cat of categories) {
+        const display = cat.display_name || cat.name;
+        const slash   = display.indexOf('/');
+        if (slash === -1) {
+            roots.push({ cat, label: display });
+        } else {
+            const key   = display.slice(0, slash);
+            const label = display.slice(slash + 1);
+            if (!groups.has(key)) groups.set(key, []);
+            groups.get(key).push({ cat, label });
+        }
+    }
+    return { groups, roots };
 }
 
 function renderCategories(categories) {
     const container = document.getElementById('categoryList');
-
-    if (categories.length === 0) {
-        container.innerHTML = '<p class="text-muted text-center">沒有可用的 wildcard</p>';
+    if (!categories.length) {
+        container.innerHTML = '<p class="text-muted text-center" style="font-size:.82rem;">沒有可用的 wildcard</p>';
         return;
     }
-
-    // 構建分類名稱到 ID 的映射
-    categoryNameToId = {};
-    categories.forEach(cat => {
-        categoryNameToId[cat.name.toLowerCase()] = cat.id;
-    });
-
-    // 添加所有可能的主分類 ID（即使它們本身沒有內容）
-    const mainCategoryIds = {
-        'character': 458,
-        'clothing': 459,
-        'environment': 460,
-        'camera': 461,
-        'universal': 464,
-        'hair': 523,
-        'face': 534,
-        'pose': 483,
-        'fanfiction': 462,
-        'misc': 465,
-        'art_style': 475
-    };
-    Object.assign(categoryNameToId, mainCategoryIds);
-
+    const { groups, roots } = buildGroups(categories);
+    const nav = document.getElementById('mainCategoryNav');
+    nav.innerHTML = `<button class="main-category-btn ${currentGroup==='all'?'active':''}" data-group="all" onclick="filterByGroup('all',this)">
+        <i class="bi bi-grid-3x3-gap"></i> 全部</button>`;
+    for (const [key] of groups) {
+        nav.innerHTML += `<button class="main-category-btn ${currentGroup===key?'active':''}" data-group="${key}" onclick="filterByGroup('${key}',this)">${key}</button>`;
+    }
     container.innerHTML = '';
-    categories.forEach(cat => {
-        const categoryDiv = document.createElement('div');
-        categoryDiv.className = 'category-group';
-        categoryDiv.dataset.categoryName = cat.name.toLowerCase();
-        categoryDiv.dataset.displayName = cat.display_name.toLowerCase();
-        categoryDiv.dataset.categoryId = cat.id;
-        categoryDiv.dataset.parentId = cat.parent_id || '';
+    for (const [gk, children] of groups) {
+        const groupDiv = document.createElement('div');
+        groupDiv.className = 'cat-group-wrapper';
+        groupDiv.dataset.group = gk;
+        groupDiv.style.display = (currentGroup==='all' || currentGroup===gk) ? 'block' : 'none';
 
+        const total = children.reduce((s,{cat}) => s + (cat.wildcard_count||0), 0);
         const header = document.createElement('div');
-        header.className = 'category-header';
-        header.style.borderLeftColor = cat.color;
-        header.style.borderLeftWidth = '4px';
-        header.innerHTML = `
-            <span>
-                ${cat.display_name}
-                <span class="category-badge">${cat.wildcard_count}</span>
-            </span>
-            <i class="bi bi-chevron-down"></i>
-        `;
-        header.onclick = () => toggleCategory(categoryDiv, cat.id);
+        header.className = 'category-header group-top-header';
+        header.innerHTML = `<span><i class="bi bi-folder me-1 text-warning" style="font-size:.8rem;"></i><strong style="font-size:.78rem;">${gk}</strong><span class="category-badge">${total}</span></span><i class="bi bi-chevron-right" style="font-size:.7rem;"></i>`;
 
-        const itemsDiv = document.createElement('div');
-        itemsDiv.className = 'wildcard-items';
-        itemsDiv.id = `items-${cat.id}`;
+        const body = document.createElement('div');
+        body.className = 'wildcard-items ps-1';
+        header.onclick = () => toggleSection(header, body);
 
-        // 只顯示前 3 個 wildcard
-        const displayCount = 3;
-        const wildcards = cat.wildcards.slice(0, displayCount);
-
-        wildcards.forEach(w => {
-            const item = document.createElement('div');
-            item.className = 'wildcard-item';
-            item.innerHTML = `
-                <div class="content">${w.content}</div>
-                ${w.content_zh ? `<div class="content-zh">${w.content_zh}</div>` : ''}
-            `;
-            item.onclick = () => insertWildcardSyntax(cat.wildcard_path);
-            itemsDiv.appendChild(item);
-        });
-
-        // 如果還有更多，顯示總數
-        if (cat.wildcards.length > displayCount) {
-            const moreItem = document.createElement('div');
-            moreItem.className = 'wildcard-item more-items';
-            moreItem.innerHTML = `
-                <div class="content text-muted" style="font-style: italic;">
-                    ... 共 ${cat.wildcards.length} 個選項
-                </div>
-            `;
-            moreItem.onclick = () => insertWildcardSyntax(cat.wildcard_path);
-            itemsDiv.appendChild(moreItem);
+        for (const { cat, label } of children) {
+            const catDiv = makeCatBlock(cat, label);
+            catDiv.dataset.search = label.toLowerCase();
+            body.appendChild(catDiv);
         }
-
-        categoryDiv.appendChild(header);
-        categoryDiv.appendChild(itemsDiv);
-        container.appendChild(categoryDiv);
-    });
+        groupDiv.appendChild(header);
+        groupDiv.appendChild(body);
+        container.appendChild(groupDiv);
+    }
+    for (const { cat, label } of roots) {
+        const catDiv = makeCatBlock(cat, label);
+        catDiv.dataset.group = '';
+        catDiv.style.display = currentGroup === 'all' ? 'block' : 'none';
+        container.appendChild(catDiv);
+    }
 }
 
-function toggleCategory(categoryDiv, catId) {
-    const itemsDiv = categoryDiv.querySelector('.wildcard-items');
-    const header = categoryDiv.querySelector('.category-header');
-    const icon = header.querySelector('i');
+function makeCatBlock(cat, label) {
+    const catDiv = document.createElement('div');
+    catDiv.className = 'category-group mb-1';
+    const header = document.createElement('div');
+    header.className = 'category-header';
+    header.style.borderLeft = `3px solid ${cat.color || '#6c757d'}`;
+    header.title = `插入 __${cat.wildcard_path}__`;
+    header.innerHTML = `<span style="font-size:.78rem;">${label}<span class="category-badge">${cat.wildcard_count}</span></span><i class="bi bi-plus-circle text-primary" style="font-size:.75rem;"></i>`;
+    header.onclick = () => insertWildcardSyntax(cat.wildcard_path);
+    catDiv.appendChild(header);
+    return catDiv;
+}
 
-    if (itemsDiv.classList.contains('show')) {
-        itemsDiv.classList.remove('show');
-        icon.className = 'bi bi-chevron-down';
-        header.classList.remove('active');
-    } else {
-        itemsDiv.classList.add('show');
-        icon.className = 'bi bi-chevron-up';
-        header.classList.add('active');
-    }
+function toggleSection(header, body) {
+    const isOpen = body.classList.contains('show');
+    body.classList.toggle('show', !isOpen);
+    const icon = header.querySelector('i.bi-chevron-right, i.bi-chevron-down');
+    if (icon) icon.className = isOpen ? 'bi bi-chevron-right' : 'bi bi-chevron-down';
+    header.classList.toggle('active', !isOpen);
+}
+
+function filterByGroup(groupKey, btn) {
+    currentGroup = groupKey;
+    document.querySelectorAll('.main-category-btn').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+    document.querySelectorAll('.cat-group-wrapper').forEach(el => {
+        el.style.display = (groupKey === 'all' || el.dataset.group === groupKey) ? 'block' : 'none';
+    });
+    document.querySelectorAll('[data-group=""]').forEach(el => {
+        el.style.display = groupKey === 'all' ? 'block' : 'none';
+    });
 }
 
 function filterCategories() {
-    const searchTerm = document.getElementById('categorySearch').value.toLowerCase();
-    const categoryGroups = document.querySelectorAll('.category-group');
-
-    categoryGroups.forEach(group => {
-        const categoryName = group.dataset.categoryName;
-        const displayName = group.dataset.displayName;
-        const parentId = group.dataset.parentId;
-
-        // First check if it matches the main category filter
-        let matchesMainCategory = true;
-        if (currentMainCategory && currentMainCategory !== 'all') {
-            const mainCategoryLower = currentMainCategory.toLowerCase();
-            const mainCategoryId = categoryNameToId[mainCategoryLower];
-
-            // Match if: 1) it's the main category itself, or 2) its parent is the main category
-            matchesMainCategory = categoryName === mainCategoryLower ||
-                                (parentId && parentId == mainCategoryId);
-        }
-
-        // Then check if it matches the search term
-        const matchesSearch = searchTerm === '' ||
-                            categoryName.includes(searchTerm) ||
-                            displayName.includes(searchTerm);
-
-        // Show only if both conditions are met
-        if (matchesMainCategory && matchesSearch) {
-            group.style.display = 'block';
-        } else {
-            group.style.display = 'none';
-        }
+    const q = document.getElementById('categorySearch').value.toLowerCase();
+    document.querySelectorAll('#categoryList .category-group').forEach(el => {
+        const txt = (el.dataset.search || el.textContent).toLowerCase();
+        el.style.display = txt.includes(q) ? 'block' : 'none';
+    });
+    document.querySelectorAll('.cat-group-wrapper').forEach(grp => {
+        const visible = [...grp.querySelectorAll('.category-group')].some(el => el.style.display !== 'none');
+        grp.style.display = visible ? 'block' : 'none';
     });
 }
 
-function filterByMainCategory(category, button) {
-    // Update active button state
-    document.querySelectorAll('.main-category-btn').forEach(btn => {
-        btn.classList.remove('active');
-    });
-    button.classList.add('active');
-
-    currentMainCategory = category;
-
-    // Clear search box when switching categories
-    document.getElementById('categorySearch').value = '';
-
-    // Filter categories based on main category
-    const categoryGroups = document.querySelectorAll('.category-group');
-    categoryGroups.forEach(group => {
-        const categoryName = group.dataset.categoryName;
-        const parentId = group.dataset.parentId;
-
-        if (category === 'all') {
-            group.style.display = 'block';
-        } else {
-            // Check if category matches the main category
-            const mainCategoryLower = category.toLowerCase();
-            const mainCategoryId = categoryNameToId[mainCategoryLower];
-
-            // Match if: 1) it's the main category itself, or 2) its parent is the main category
-            if (categoryName === mainCategoryLower ||
-                (parentId && parentId == mainCategoryId)) {
-                group.style.display = 'block';
-            } else {
-                group.style.display = 'none';
-            }
-        }
-    });
-}
-
+// ─── Wildcard insertion ───────────────────────────────────────
 function insertWildcardSyntax(wildcardPath) {
-    const textarea = document.getElementById('promptTextarea');
-    const cursorPos = textarea.selectionStart;
-    const textBefore = textarea.value.substring(0, cursorPos);
-    const textAfter = textarea.value.substring(cursorPos);
-
-    const insertText = `__${wildcardPath}__`;
-    textarea.value = textBefore + insertText + textAfter;
-
-    // 將游標移到插入文本之後
-    const newPos = cursorPos + insertText.length;
-    textarea.setSelectionRange(newPos, newPos);
-    textarea.focus();
-
-    updateStats();
+    insertSyntax('__' + wildcardPath + '__', '');
 }
 
 function insertSyntax(before, after) {
-    const textarea = document.getElementById('promptTextarea');
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const selectedText = textarea.value.substring(start, end);
-
-    const insertText = before + selectedText + after;
-    const textBefore = textarea.value.substring(0, start);
-    const textAfter = textarea.value.substring(end);
-
-    textarea.value = textBefore + insertText + textAfter;
-
-    // 將游標放在兩個符號之間
-    const newPos = start + before.length + selectedText.length;
-    textarea.setSelectionRange(newPos, newPos);
-    textarea.focus();
-
+    const ta = document.getElementById('promptTextarea');
+    const s = ta.selectionStart, e = ta.selectionEnd;
+    const selected = ta.value.substring(s, e);
+    const replaced = before + selected + after;
+    ta.value = ta.value.substring(0, s) + replaced + ta.value.substring(e);
+    ta.focus();
+    const pos = s + before.length + selected.length;
+    ta.setSelectionRange(pos + (after ? 0 : 0), pos + (after ? 0 : 0));
     updateStats();
 }
 
 function insertCharacter(char) {
-    const textarea = document.getElementById('promptTextarea');
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-
-    const textBefore = textarea.value.substring(0, start);
-    const textAfter = textarea.value.substring(end);
-
-    textarea.value = textBefore + char + textAfter;
-
-    // 將游標放在插入字符之後
-    const newPos = start + char.length;
-    textarea.setSelectionRange(newPos, newPos);
-    textarea.focus();
-
+    const ta = document.getElementById('promptTextarea');
+    const s = ta.selectionStart;
+    ta.value = ta.value.substring(0, s) + char + ta.value.substring(s);
+    ta.focus();
+    ta.setSelectionRange(s + char.length, s + char.length);
     updateStats();
 }
 
 function insertVariableDefinition() {
-    const textarea = document.getElementById('promptTextarea');
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const selectedText = textarea.value.substring(start, end);
-
-    // 詢問變數名稱
-    const varName = prompt('請輸入變數名稱（只能使用英文字母、數字和底線）:', 'myvar');
-    if (!varName) return;
-
-    // 驗證變數名稱
-    if (!/^[a-zA-Z0-9_]+$/.test(varName)) {
-        alert('變數名稱只能包含英文字母、數字和底線！');
-        return;
-    }
-
-    const insertText = selectedText
-        ? `{$${varName}=${selectedText}}`
-        : `{$${varName}=value}`;
-
-    const textBefore = textarea.value.substring(0, start);
-    const textAfter = textarea.value.substring(end);
-
-    textarea.value = textBefore + insertText + textAfter;
-
-    // 將游標放在 value 位置（如果沒有選取文字）
-    if (!selectedText) {
-        const newPos = start + `{$${varName}=`.length;
-        textarea.setSelectionRange(newPos, newPos + 5); // 選中 "value"
-    } else {
-        const newPos = start + insertText.length;
-        textarea.setSelectionRange(newPos, newPos);
-    }
-
-    textarea.focus();
-    updateStats();
+    const name = prompt('變數名稱（英數字）：');
+    if (!name) return;
+    insertSyntax(`{$${name}=`, '}');
 }
 
 function insertVariableReference() {
-    const textarea = document.getElementById('promptTextarea');
-    const start = textarea.selectionStart;
-
-    // 詢問要引用的變數名稱
-    const varName = prompt('請輸入要引用的變數名稱:', 'myvar');
-    if (!varName) return;
-
-    // 驗證變數名稱
-    if (!/^[a-zA-Z0-9_]+$/.test(varName)) {
-        alert('變數名稱只能包含英文字母、數字和底線！');
-        return;
-    }
-
-    const insertText = `$${varName}`;
-    const textBefore = textarea.value.substring(0, start);
-    const textAfter = textarea.value.substring(start);
-
-    textarea.value = textBefore + insertText + textAfter;
-
-    // 將游標移到插入文本之後
-    const newPos = start + insertText.length;
-    textarea.setSelectionRange(newPos, newPos);
-    textarea.focus();
-
-    updateStats();
+    const name = prompt('引用的變數名稱：');
+    if (!name) return;
+    insertCharacter('$' + name);
 }
 
+// ─── Preview ──────────────────────────────────────────────────
 async function generatePreview() {
-    const prompt = document.getElementById('promptTextarea').value.trim();
-
-    if (!prompt) {
-        alert('請先輸入提示詞');
-        return;
-    }
-
-    const container = document.getElementById('previewContainer');
-    container.innerHTML = '<div class="text-center"><div class="loading-spinner"></div> 生成中...</div>';
-
+    const prompt = document.getElementById('promptTextarea').value;
+    if (!prompt.trim()) return;
     try {
-        const response = await fetch('/api/prompt-builder/preview', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt: prompt })
+        const r = await fetch('/api/prompt-builder/preview', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({prompt})
         });
-
-        const result = await response.json();
-
-        if (response.ok) {
-            let variablesHtml = '';
-            if (result.variables && Object.keys(result.variables).length > 0) {
-                variablesHtml = `
-                    <div class="preview-item" style="border-left-color: #ffc107;">
-                        <div class="preview-label">使用的變數：</div>
-                        <div class="preview-text">
-                            ${Object.entries(result.variables).map(([k, v]) =>
-                                `<strong>$${k}</strong> = ${escapeHtml(v)}`
-                            ).join('<br>')}
-                        </div>
-                    </div>
-                `;
-            }
-
-            container.innerHTML = `
-                <div class="preview-item">
-                    <div class="preview-label">原始提示詞：</div>
-                    <div class="preview-text">${escapeHtml(result.original)}</div>
-                </div>
-                ${variablesHtml}
-                <div class="preview-item" style="border-left-color: #28a745;">
-                    <div class="preview-label">隨機化結果：</div>
-                    <div class="preview-text">${escapeHtml(result.preview)}</div>
-                </div>
-            `;
-        } else {
-            container.innerHTML = `<p class="text-danger">生成失敗: ${result.error}</p>`;
-        }
-    } catch (error) {
-        container.innerHTML = `<p class="text-danger">生成失敗: ${error.message}</p>`;
+        const d = await r.json();
+        const el = document.getElementById('previewContainer');
+        if (d.error) { el.innerHTML = `<span class="text-danger">${escapeHtml(d.error)}</span>`; }
+        else { el.innerHTML = `<div style="white-space:pre-wrap; word-break:break-word;">${escapeHtml(d.preview)}</div>`; }
+    } catch(e) {
+        document.getElementById('previewContainer').innerHTML = '<span class="text-danger">生成失敗</span>';
     }
 }
 
 async function generateMultiplePreviews(count) {
-    const prompt = document.getElementById('promptTextarea').value.trim();
-
-    if (!prompt) {
-        alert('請先輸入提示詞');
-        return;
-    }
-
-    const container = document.getElementById('multiplePreviewsContainer');
-    container.innerHTML = '<div class="text-center"><div class="loading-spinner"></div> 生成中...</div>';
-
-    try {
-        const previews = [];
-        for (let i = 0; i < count; i++) {
-            const response = await fetch('/api/prompt-builder/preview', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ prompt: prompt })
+    const prompt = document.getElementById('promptTextarea').value;
+    if (!prompt.trim()) return;
+    const el = document.getElementById('multiplePreviewsContainer');
+    el.innerHTML = '<span class="text-muted">生成中...</span>';
+    const results = [];
+    for (let i = 0; i < count; i++) {
+        try {
+            const r = await fetch('/api/prompt-builder/preview', {
+                method: 'POST', headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({prompt})
             });
-
-            const result = await response.json();
-            if (response.ok) {
-                previews.push(result.preview);
-            }
-        }
-
-        container.innerHTML = previews.map((p, i) => `
-            <div class="preview-item">
-                <div class="preview-label">結果 ${i + 1}：</div>
-                <div class="preview-text">${escapeHtml(p)}</div>
-            </div>
-        `).join('');
-
-    } catch (error) {
-        container.innerHTML = `<p class="text-danger">生成失敗: ${error.message}</p>`;
+            const d = await r.json();
+            if (!d.error) results.push(d.preview);
+        } catch {}
     }
+    if (!results.length) { el.innerHTML = '<span class="text-danger">生成失敗</span>'; return; }
+    el.innerHTML = results.map((r, i) =>
+        `<div class="mb-1 pb-1 border-bottom" style="font-size:.75rem;"><span class="text-muted me-1">${i+1}.</span>${escapeHtml(r)}</div>`
+    ).join('');
 }
 
+// ─── Editor utils ─────────────────────────────────────────────
 function clearPrompt() {
-    if (confirm('確定要清空編輯器內容嗎？')) {
+    if (confirm('確定要清空提示詞嗎？')) {
         document.getElementById('promptTextarea').value = '';
         updateStats();
     }
 }
 
-function copyToClipboard() {
-    const textarea = document.getElementById('promptTextarea');
-    textarea.select();
-    document.execCommand('copy');
-
-    alert('已複製到剪貼簿！');
+async function copyToClipboard() {
+    const text = document.getElementById('promptTextarea').value;
+    if (!text) return;
+    try {
+        await navigator.clipboard.writeText(text);
+        showToast('已複製到剪貼簿', 'success');
+    } catch {
+        showToast('複製失敗', 'danger');
+    }
 }
 
 function updateStats() {
-    const textarea = document.getElementById('promptTextarea');
-    const text = textarea.value;
-
+    const text = document.getElementById('promptTextarea').value;
     document.getElementById('charCount').textContent = text.length;
-    document.getElementById('lineCount').textContent = text.split('\n').length;
+    document.getElementById('lineCount').textContent = text ? text.split('\n').length : 0;
 }
 
-function showHelpModal() {
-    helpModal.show();
-}
+function showHelpModal()  { helpModal.show(); }
 
-// ========== 模板管理函數 ==========
-let saveTemplateModal, loadTemplateModal;
-
-document.addEventListener('DOMContentLoaded', () => {
-    saveTemplateModal = new bootstrap.Modal(document.getElementById('saveTemplateModal'));
-    loadTemplateModal = new bootstrap.Modal(document.getElementById('loadTemplateModal'));
-});
-
+// ─── Template save/load ───────────────────────────────────────
 function showSaveTemplateModal() {
-    const prompt = document.getElementById('promptTextarea').value.trim();
-    if (!prompt) {
-        alert('請先輸入提示詞內容');
-        return;
-    }
-
     document.getElementById('templateName').value = '';
     document.getElementById('templateDescription').value = '';
-    saveTemplateModal.show();
+    saveModal.show();
 }
 
 async function saveTemplate() {
     const name = document.getElementById('templateName').value.trim();
-    const description = document.getElementById('templateDescription').value.trim();
-    const content = document.getElementById('promptTextarea').value.trim();
-
-    if (!name) {
-        alert('請輸入模板名稱');
-        return;
-    }
-
-    if (!content) {
-        alert('提示詞內容為空');
-        return;
-    }
-
+    const desc = document.getElementById('templateDescription').value.trim();
+    const content = document.getElementById('promptTextarea').value;
+    if (!name) { alert('請輸入模板名稱'); return; }
+    if (!content) { alert('提示詞不能為空'); return; }
     try {
-        const response = await fetch('/api/prompt-templates', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, description, content })
+        const r = await fetch('/api/prompt-templates', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({name, description: desc, content})
         });
-
-        if (response.ok) {
-            alert('模板保存成功！');
-            saveTemplateModal.hide();
-        } else {
-            const error = await response.json();
-            alert('保存失敗: ' + (error.error || '未知錯誤'));
-        }
-    } catch (error) {
-        alert('保存時發生錯誤: ' + error.message);
-    }
+        const d = await r.json();
+        if (d.error) { alert(d.error); return; }
+        saveModal.hide();
+        showToast('模板已儲存', 'success');
+    } catch { alert('儲存失敗'); }
 }
 
 async function showLoadTemplateModal() {
-    loadTemplateModal.show();
-
-    const container = document.getElementById('templateListContainer');
-    container.innerHTML = '<p class="text-center text-muted">載入中...</p>';
-
+    loadModal.show();
+    const el = document.getElementById('templateListContainer');
+    el.innerHTML = '<p class="text-center text-muted">載入中...</p>';
     try {
-        const response = await fetch('/api/prompt-templates');
-        const templates = await response.json();
+        const r = await fetch('/api/prompt-templates');
+        const templates = await r.json();
+        if (!templates.length) { el.innerHTML = '<p class="text-muted text-center">尚無模板</p>'; return; }
+        el.innerHTML = `<div class="list-group list-group-flush">
+            ${templates.map(t => `
+            <div class="list-group-item d-flex align-items-center gap-2 py-2">
+                <div class="flex-grow-1">
+                    <div class="fw-semibold" style="font-size:.85rem;">${escapeHtml(t.name)}</div>
+                    ${t.description ? `<div class="text-muted" style="font-size:.75rem;">${escapeHtml(t.description)}</div>` : ''}
+                </div>
+                <button class="btn btn-sm btn-primary py-0 px-2" onclick="loadTemplate(${t.id})">載入</button>
+                <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="deleteTemplate(${t.id},event)"><i class="bi bi-trash"></i></button>
+            </div>`).join('')}
+        </div>`;
+    } catch { el.innerHTML = '<p class="text-danger text-center">載入失敗</p>'; }
+}
 
-        if (templates.length === 0) {
-            container.innerHTML = '<p class="text-center text-muted">尚無已保存的模板</p>';
+async function loadTemplate(id) {
+    try {
+        const r = await fetch(`/api/prompt-templates/${id}`);
+        const d = await r.json();
+        if (d.content) {
+            document.getElementById('promptTextarea').value = d.content;
+            updateStats();
+            loadModal.hide();
+            showToast('模板已載入', 'success');
+        }
+    } catch { alert('載入失敗'); }
+}
+
+async function deleteTemplate(id, event) {
+    event.stopPropagation();
+    if (!confirm('確定要刪除這個模板嗎？')) return;
+    try {
+        await fetch(`/api/prompt-templates/${id}`, {method:'DELETE'});
+        showLoadTemplateModal();
+    } catch { alert('刪除失敗'); }
+}
+
+// ─── Danbooru ─────────────────────────────────────────────────
+async function danSearch(page = 1) {
+    danPage = page;
+    danCurrentTags = document.getElementById('dan-search').value.trim();
+    const statusEl = document.getElementById('dan-status');
+    const gridEl   = document.getElementById('dan-grid');
+    gridEl.innerHTML = '<div class="text-center mt-4"><div class="spinner-border spinner-border-sm text-secondary"></div></div>';
+    statusEl.textContent = '搜尋中...';
+    danHideTagPanel();
+    try {
+        const params = new URLSearchParams({tags: danCurrentTags, limit: 20, page});
+        const r = await fetch(`/api/danbooru/browse?${params}`);
+        const posts = await r.json();
+        if (posts.error) { gridEl.innerHTML = `<div class="text-danger text-center p-3" style="font-size:.8rem;">${escapeHtml(posts.error)}</div>`; statusEl.textContent = ''; return; }
+        statusEl.textContent = posts.length ? `${posts.length} 筆結果` : '無結果';
+        if (!posts.length) {
+            gridEl.innerHTML = '<div class="text-muted text-center p-3" style="font-size:.8rem;">找不到結果，請嘗試其他 tag</div>';
             return;
         }
-
-        let html = '<div class="list-group">';
-        templates.forEach(t => {
-            const date = new Date(t.updated_at).toLocaleString('zh-TW');
-            html += `
-                <div class="list-group-item">
-                    <div class="d-flex w-100 justify-content-between align-items-start">
-                        <div class="flex-fill" style="cursor: pointer;" onclick="loadTemplate(${t.id})">
-                            <h6 class="mb-1">${escapeHtml(t.name)}</h6>
-                            ${t.description ? `<p class="mb-1 small text-muted">${escapeHtml(t.description)}</p>` : ''}
-                            <small class="text-muted">更新時間: ${date}</small>
-                        </div>
-                        <button class="btn btn-sm btn-outline-danger ms-2" onclick="deleteTemplate(${t.id}, event)" title="刪除">
-                            <i class="bi bi-trash"></i>
-                        </button>
-                    </div>
-                    <div class="mt-2">
-                        <small class="text-muted">內容預覽:</small>
-                        <pre class="mb-0 p-2 bg-light border rounded" style="font-size: 0.85em; max-height: 100px; overflow-y: auto;">${escapeHtml(t.content)}</pre>
-                    </div>
-                </div>
-            `;
-        });
-        html += '</div>';
-        container.innerHTML = html;
-    } catch (error) {
-        container.innerHTML = `<p class="text-center text-danger">載入失敗: ${error.message}</p>`;
+        gridEl.innerHTML = `<div class="dan-grid-inner">${
+            posts.map(p => `<img src="${escapeHtml(p.preview_url)}" class="dan-thumb"
+                title="${escapeHtml(p.tags_general.split(' ').slice(0,5).join(', '))}"
+                onclick='danSelectPost(${JSON.stringify(p).replace(/'/g,"\\'")})'
+                onerror="this.style.display='none'">`).join('')
+        }</div>`;
+        // Pagination
+        const pag = document.getElementById('dan-pagination');
+        pag.innerHTML = (page > 1 ? `<button class="btn btn-outline-secondary py-0" style="font-size:.68rem; padding:.1rem .4rem;" onclick="danSearch(${page-1})">‹</button>` : '') +
+            `<span style="font-size:.68rem; color:var(--text-secondary);">p${page}</span>` +
+            (posts.length >= 20 ? `<button class="btn btn-outline-secondary py-0" style="font-size:.68rem; padding:.1rem .4rem;" onclick="danSearch(${page+1})">›</button>` : '');
+    } catch(e) {
+        gridEl.innerHTML = `<div class="text-danger text-center p-3" style="font-size:.8rem;">請求失敗：${escapeHtml(e.message)}</div>`;
+        statusEl.textContent = '';
     }
 }
 
-async function loadTemplate(templateId) {
-    try {
-        const response = await fetch(`/api/prompt-templates/${templateId}`);
-        const template = await response.json();
+function danSelectPost(post) {
+    danSelectedPost = post;
+    // Highlight selected
+    document.querySelectorAll('.dan-thumb').forEach(el => el.classList.remove('selected'));
+    event.target.classList.add('selected');
+    // Show tag panel
+    const panel = document.getElementById('dan-tag-panel');
+    const content = document.getElementById('dan-tags-content');
+    panel.classList.remove('d-none');
 
-        if (confirm(`確定要載入模板「${template.name}」嗎？\n\n當前編輯器中的內容將被覆蓋。`)) {
-            document.getElementById('promptTextarea').value = template.content;
-            updateStats();
-            loadTemplateModal.hide();
-        }
-    } catch (error) {
-        alert('載入模板時發生錯誤: ' + error.message);
+    const general   = post.tags_general   ? post.tags_general.split(' ').filter(Boolean)   : [];
+    const character = post.tags_character ? post.tags_character.split(' ').filter(Boolean) : [];
+    const artist    = post.tags_artist    ? post.tags_artist.split(' ').filter(Boolean)    : [];
+
+    content.innerHTML = [
+        character.map(t => `<span class="tag-chip tc" onclick="addTag('${t}')">${t}</span>`).join(''),
+        artist.map(t    => `<span class="tag-chip ta" onclick="addTag('${t}')">${t}</span>`).join(''),
+        general.map(t   => `<span class="tag-chip tg" onclick="addTag('${t}')">${t}</span>`).join(''),
+    ].join('');
+}
+
+function danHideTagPanel() {
+    document.getElementById('dan-tag-panel').classList.add('d-none');
+    danSelectedPost = null;
+}
+
+function addTag(tag) {
+    const ta = document.getElementById('promptTextarea');
+    const sep = ta.value && !ta.value.endsWith(', ') && !ta.value.endsWith(',') ? ', ' : '';
+    ta.value += sep + tag.replace(/_/g, ' ');
+    updateStats();
+}
+
+function addAllDanTags() {
+    if (!danSelectedPost) return;
+    const all = [
+        ...(danSelectedPost.tags_character ? danSelectedPost.tags_character.split(' ') : []),
+        ...(danSelectedPost.tags_artist    ? danSelectedPost.tags_artist.split(' ')    : []),
+        ...(danSelectedPost.tags_general   ? danSelectedPost.tags_general.split(' ')   : []),
+    ].filter(Boolean).map(t => t.replace(/_/g, ' '));
+
+    const ta = document.getElementById('promptTextarea');
+    const sep = ta.value.trim() ? ', ' : '';
+    ta.value += sep + all.join(', ');
+    updateStats();
+    showToast(`已加入 ${all.length} 個 tag`, 'success');
+}
+
+// ─── ComfyUI execution from builder ──────────────────────────
+async function loadComfyWorkflows() {
+    try {
+        const wfs = await fetch('/api/comfy/workflows').then(r => r.json());
+        comfyWorkflows = Array.isArray(wfs) ? wfs : [];
+        const sel = document.getElementById('comfy-wf-select');
+        sel.innerHTML = '<option value="">— 選擇工作流 —</option>' +
+            comfyWorkflows.map(w => `<option value="${w.id}">${escapeHtml(w.name)}</option>`).join('');
+    } catch {}
+}
+
+async function runFromBuilder() {
+    const wfId = document.getElementById('comfy-wf-select').value;
+    if (!wfId) { alert('請先選擇工作流'); return; }
+    const prompt = document.getElementById('promptTextarea').value.trim();
+    if (!prompt) { alert('提示詞不能為空'); return; }
+
+    setBuilderStatus('🔄 送往 ComfyUI...', false);
+    document.getElementById('builder-images').innerHTML = '';
+    document.getElementById('builder-run-stop').style.display = 'inline-block';
+
+    try {
+        const r = await fetch(`/api/comfy/workflows/${wfId}/run`, {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({placeholders: {prompt}})
+        });
+        const d = await r.json();
+        if (d.error) { setBuilderStatus('', true, d.error); return; }
+        builderJobId = d.job_id;
+        const seedTip = d.resolved_seed != null ? `  ·  種子 ${d.resolved_seed}` : '';
+        setBuilderStatus(`已加入佇列 (Job ${d.job_id})${seedTip}`, false);
+        startBuilderPoll(d.job_id);
+    } catch(e) {
+        setBuilderStatus('', true, e.message);
     }
 }
 
-async function deleteTemplate(templateId, event) {
-    event.stopPropagation();
+function startBuilderPoll(jobId) {
+    stopBuilderPoll();
+    builderPollTimer = setInterval(() => pollBuilderJob(jobId), 3000);
+    pollBuilderJob(jobId);
+}
 
-    if (!confirm('確定要刪除此模板嗎？此操作無法復原。')) {
-        return;
-    }
+function stopBuilderPoll() {
+    if (builderPollTimer) { clearInterval(builderPollTimer); builderPollTimer = null; }
+    document.getElementById('builder-run-stop').style.display = 'none';
+}
 
+async function pollBuilderJob(jobId) {
     try {
-        const response = await fetch(`/api/prompt-templates/${templateId}`, {
-            method: 'DELETE'
-        });
-
-        if (response.ok) {
-            alert('模板已刪除');
-            showLoadTemplateModal(); // 重新載入列表
+        const j = await fetch(`/api/comfy/jobs/${jobId}/status`).then(r => r.json());
+        if (j.status === 'completed') {
+            stopBuilderPoll();
+            setBuilderStatus('✅ 完成！', false);
+            renderBuilderImages(j.output_images || [], jobId);
+        } else if (j.status === 'failed') {
+            stopBuilderPoll();
+            setBuilderStatus('', true, j.error_message || '執行失敗');
         } else {
-            alert('刪除失敗');
+            setBuilderStatus(j.status === 'running' ? '⏳ 生成中...' : '⏳ 佇列中...', false);
         }
-    } catch (error) {
-        alert('刪除時發生錯誤: ' + error.message);
-    }
+    } catch {}
+}
+
+function renderBuilderImages(images, jobId) {
+    const el = document.getElementById('builder-images');
+    if (!images.length) { el.innerHTML = '<p class="text-muted col-12" style="font-size:.75rem;">無輸出圖片</p>'; return; }
+    el.innerHTML = images.map(img => {
+        const src = `/api/comfy/jobs/${jobId}/image?filename=${encodeURIComponent(img.filename)}&subfolder=${encodeURIComponent(img.subfolder)}&type=${encodeURIComponent(img.type)}`;
+        return `<div class="col-6"><img src="${src}" class="builder-img-thumb" onclick="openZoomModal('${src}','${escapeHtml(img.filename)}')" onerror="this.parentElement.remove()"></div>`;
+    }).join('');
+}
+
+function setBuilderStatus(msg, isError, errMsg) {
+    document.getElementById('builder-run-status').textContent = msg || '';
+    const errEl = document.getElementById('builder-run-error');
+    if (isError && errMsg) { errEl.textContent = errMsg; errEl.classList.remove('d-none'); }
+    else { errEl.classList.add('d-none'); }
+}
+
+function openZoomModal(src, filename) {
+    document.getElementById('zoom-img').src = src;
+    document.getElementById('zoom-dl').href = src;
+    document.getElementById('zoom-dl').download = filename;
+    new bootstrap.Modal(document.getElementById('imgZoomModal')).show();
+}
+
+// ─── Util ─────────────────────────────────────────────────────
+function sendToComfy() {
+    const prompt = document.getElementById('promptTextarea').value.trim();
+    if (!prompt) { alert('請先輸入提示詞'); return; }
+    sessionStorage.setItem('comfy_pending_prompt', prompt);
+    window.location.href = '/comfy-workflows';
 }
 
 function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+    const d = document.createElement('div');
+    d.textContent = text ?? '';
+    return d.innerHTML;
 }
 </script>
 {% endblock %}

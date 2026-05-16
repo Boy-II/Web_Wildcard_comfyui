@@ -3,69 +3,671 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Wildcard 管理系統{% endblock %}</title>
+    <title>{% block title %}Wildcard Studio{% endblock %}</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <!-- Prevent flash of unstyled theme -->
+    <script>if(localStorage.getItem('theme')==='dark')document.documentElement.setAttribute('data-bs-theme','dark');</script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     {% block extra_css %}{% endblock %}
-</head>
-<body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="/">
-                <i class="bi bi-stars"></i> Wildcard 管理系統
-            </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav">
-                    <li class="nav-item">
-                        <a class="nav-link" href="/">
-                            <i class="bi bi-house-door"></i> 首頁
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/wildcards">
-                            <i class="bi bi-list-ul"></i> Wildcard 列表
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/prompt-builder">
-                            <i class="bi bi-pencil-square"></i> 提示詞構建器
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/import">
-                            <i class="bi bi-upload"></i> 匯入資料
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/export">
-                            <i class="bi bi-download"></i> 匯出資料
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/comfy-monitor">
-                            <i class="bi bi-folder-fill"></i> ComfyUI 監視
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/translation-settings">
-                            <i class="bi bi-gear-fill"></i> 翻譯設定
-                        </a>
-                    </li>
-                </ul>
-            </div>
-        </div>
-    </nav>
+<style>
+/* ── Design tokens ─────────────────────────────────────────── */
+:root {
+    --sb-w:          220px;
+    --sb-bg:         #1c1917;
+    --sb-border:     rgba(255,255,255,.07);
+    --sb-text:       #a8a29e;
+    --sb-text-hover: #e7e5e4;
+    --sb-hover-bg:   rgba(255,255,255,.06);
+    --sb-active-bg:  rgba(217,119,6,.15);
+    --sb-active-fg:  #fbbf24;
+    --sb-active-bar: #d97706;
+    --accent:        #d97706;
+    --accent-light:  #fef3c7;
+    --content-bg:    #f9f8f6;
+    --card-bg:       #ffffff;
+    --text-primary:  #1c1917;
+    --text-secondary:#78716c;
+    --border-color:  #e7e5e4;
+}
 
-    <div class="container-fluid py-4">
-        {% block content %}{% endblock %}
+/* ── Reset & base ──────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: var(--content-bg);
+    color: var(--text-primary);
+    display: flex;
+}
+
+/* ── Sidebar ───────────────────────────────────────────────── */
+#sidebar {
+    width: var(--sb-w);
+    min-width: var(--sb-w);
+    height: 100vh;
+    position: fixed;
+    top: 0; left: 0;
+    background: var(--sb-bg);
+    display: flex;
+    flex-direction: column;
+    z-index: 200;
+    border-right: 1px solid rgba(0,0,0,.3);
+}
+
+/* Brand */
+.sb-brand {
+    padding: 1.25rem 1.1rem 1.1rem;
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    border-bottom: 1px solid var(--sb-border);
+    flex-shrink: 0;
+    text-decoration: none;
+}
+.sb-brand-icon {
+    width: 32px; height: 32px;
+    background: linear-gradient(135deg, #d97706, #92400e);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: .95rem;
+    flex-shrink: 0;
+}
+.sb-brand-name {
+    font-size: .92rem;
+    font-weight: 700;
+    color: #fafaf9;
+    line-height: 1.2;
+}
+.sb-brand-sub {
+    font-size: .65rem;
+    color: #57534e;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+}
+
+/* Nav */
+.sb-nav {
+    flex: 1;
+    overflow-y: auto;
+    padding: .75rem 0 .5rem;
+}
+.sb-nav::-webkit-scrollbar { width: 3px; }
+.sb-nav::-webkit-scrollbar-thumb { background: #292524; border-radius: 2px; }
+
+.sb-label {
+    padding: .5rem 1.1rem .2rem;
+    font-size: .64rem;
+    font-weight: 600;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: #44403c;
+}
+
+.sb-item {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    padding: .55rem 1.1rem;
+    color: var(--sb-text);
+    text-decoration: none;
+    font-size: .84rem;
+    font-weight: 500;
+    border-left: 2px solid transparent;
+    transition: background .1s, color .1s, border-color .1s;
+}
+.sb-item:hover {
+    background: var(--sb-hover-bg);
+    color: var(--sb-text-hover);
+}
+.sb-item.active {
+    background: var(--sb-active-bg);
+    color: var(--sb-active-fg);
+    border-left-color: var(--sb-active-bar);
+}
+.sb-item i {
+    font-size: .95rem;
+    width: 1.1rem;
+    text-align: center;
+    flex-shrink: 0;
+    opacity: .85;
+}
+.sb-item.active i { opacity: 1; }
+
+.sb-divider {
+    height: 1px;
+    background: var(--sb-border);
+    margin: .5rem 1.1rem;
+}
+
+/* Footer */
+.sb-footer {
+    padding: .75rem;
+    border-top: 1px solid var(--sb-border);
+    flex-shrink: 0;
+}
+.sb-ai-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: .55rem;
+    padding: .55rem .9rem;
+    background: rgba(217,119,6,.12);
+    border: 1px solid rgba(217,119,6,.22);
+    border-radius: 8px;
+    color: #a16207;
+    font-size: .82rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all .15s;
+    font-family: inherit;
+}
+.sb-ai-btn:hover {
+    background: rgba(217,119,6,.22);
+    color: #d97706;
+    border-color: rgba(217,119,6,.4);
+}
+.sb-ai-btn i { font-size: .95rem; }
+
+.sb-dark-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: .55rem;
+    padding: .5rem .9rem;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    color: var(--sb-text);
+    font-size: .8rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all .15s;
+    font-family: inherit;
+    margin-top: .35rem;
+}
+.sb-dark-btn:hover {
+    background: var(--sb-hover-bg);
+    color: var(--sb-text-hover);
+}
+.sb-dark-btn i { font-size: .9rem; width: 1.1rem; text-align: center; }
+
+/* ── Main content ──────────────────────────────────────────── */
+#main-wrap {
+    margin-left: var(--sb-w);
+    flex: 1;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* ── Global card/component overrides ──────────────────────── */
+.card {
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.05), 0 1px 2px rgba(0,0,0,.04);
+}
+.card-header {
+    background: #fafaf9;
+    border-bottom: 1px solid var(--border-color);
+    border-radius: 10px 10px 0 0 !important;
+    padding: .75rem 1rem;
+}
+.btn-primary {
+    background: var(--accent);
+    border-color: var(--accent);
+}
+.btn-primary:hover, .btn-primary:focus {
+    background: #b45309;
+    border-color: #b45309;
+}
+.btn-outline-primary {
+    color: var(--accent);
+    border-color: var(--accent);
+}
+.btn-outline-primary:hover {
+    background: var(--accent);
+    border-color: var(--accent);
+}
+.badge.bg-primary { background: var(--accent) !important; }
+.text-primary { color: var(--accent) !important; }
+.nav-tabs .nav-link.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+}
+.form-control:focus, .form-select:focus {
+    border-color: #fbbf24;
+    box-shadow: 0 0 0 .2rem rgba(217,119,6,.18);
+}
+
+/* ── Dark mode ─────────────────────────────────────────────── */
+[data-bs-theme="dark"] {
+    --content-bg:    #1a1714;
+    --card-bg:       #252220;
+    --text-primary:  #f5f5f4;
+    --text-secondary:#a8a29e;
+    --border-color:  #3a3633;
+}
+[data-bs-theme="dark"] body         { color: var(--text-primary); }
+[data-bs-theme="dark"] #main-wrap   { background: var(--content-bg); }
+[data-bs-theme="dark"] .card        { background: var(--card-bg); border-color: var(--border-color); }
+[data-bs-theme="dark"] .card-header { background: #1e1b18; border-bottom-color: var(--border-color); }
+[data-bs-theme="dark"] .table       { --bs-table-bg: var(--card-bg); --bs-table-border-color: var(--border-color); }
+[data-bs-theme="dark"] .table-light { --bs-table-bg: #2a2724; }
+[data-bs-theme="dark"] .form-control,
+[data-bs-theme="dark"] .form-select { background: #252220; border-color: var(--border-color); color: var(--text-primary); }
+[data-bs-theme="dark"] .form-control:focus,
+[data-bs-theme="dark"] .form-select:focus { background: #2d2a27; border-color: #fbbf24; }
+[data-bs-theme="dark"] .input-group-text { background: #252220; border-color: var(--border-color); color: var(--text-secondary); }
+[data-bs-theme="dark"] .modal-content { background: #252220; border-color: var(--border-color); }
+[data-bs-theme="dark"] .modal-header,
+[data-bs-theme="dark"] .modal-footer { border-color: var(--border-color); }
+[data-bs-theme="dark"] .dropdown-menu { background: #252220; border-color: var(--border-color); }
+[data-bs-theme="dark"] .dropdown-item:hover { background: #3a3633; }
+[data-bs-theme="dark"] .nav-tabs { border-color: var(--border-color); }
+[data-bs-theme="dark"] .nav-tabs .nav-link { color: var(--text-secondary); }
+[data-bs-theme="dark"] .nav-tabs .nav-link.active { background: var(--card-bg); border-color: var(--border-color) var(--border-color) var(--card-bg); color: var(--accent); }
+[data-bs-theme="dark"] .alert-danger { background: #3b1c1c; border-color: #7f1d1d; color: #fca5a5; }
+[data-bs-theme="dark"] .alert-success { background: #1a3a1a; border-color: #166534; color: #86efac; }
+[data-bs-theme="dark"] .alert-info { background: #1a2a3a; border-color: #1e3a5f; color: #93c5fd; }
+[data-bs-theme="dark"] .list-group-item { background: var(--card-bg); border-color: var(--border-color); color: var(--text-primary); }
+[data-bs-theme="dark"] .bg-light { background: #252220 !important; }
+[data-bs-theme="dark"] .bg-white { background: var(--card-bg) !important; }
+[data-bs-theme="dark"] .border, [data-bs-theme="dark"] .border-bottom,
+[data-bs-theme="dark"] .border-top { border-color: var(--border-color) !important; }
+[data-bs-theme="dark"] .text-muted { color: var(--text-secondary) !important; }
+[data-bs-theme="dark"] .text-dark  { color: var(--text-primary) !important; }
+[data-bs-theme="dark"] code { background: #3a3633; color: #fbbf24; border-radius: 3px; padding: 0 .25rem; }
+
+/* Dark sidebar adjustment */
+[data-bs-theme="dark"] #sidebar { background: #141210; }
+[data-bs-theme="dark"] .sb-dark-btn { color: var(--sb-text); }
+
+/* ── AI Panel (global) ─────────────────────────────────────── */
+#ai-overlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.4);
+    z-index: 1050;
+}
+#ai-panel {
+    position: fixed;
+    top: 0; right: -400px;
+    width: 380px; height: 100vh;
+    background: #111827;
+    z-index: 1051;
+    display: flex; flex-direction: column;
+    transition: right .3s cubic-bezier(.4,0,.2,1);
+    box-shadow: -6px 0 30px rgba(0,0,0,.5);
+}
+
+/* AI typing dots */
+.ai-dot {
+    display: inline-block; width: 6px; height: 6px;
+    border-radius: 50%; background: #6b7280; margin: 0 2px;
+    animation: ai-bounce .9s infinite;
+}
+.ai-dot:nth-child(2) { animation-delay: .15s; }
+.ai-dot:nth-child(3) { animation-delay: .3s; }
+@keyframes ai-bounce {
+    0%,80%,100% { transform: translateY(0); }
+    40%          { transform: translateY(-5px); }
+}
+#ai-messages::-webkit-scrollbar { width: 4px; }
+#ai-messages::-webkit-scrollbar-track { background: transparent; }
+#ai-messages::-webkit-scrollbar-thumb { background: #374151; border-radius: 2px; }
+</style>
+</head>
+
+<body>
+
+<!-- ═══════════════ SIDEBAR ═══════════════════════════════════ -->
+<nav id="sidebar">
+
+    <a href="/" class="sb-brand">
+        <div class="sb-brand-icon"><i class="bi bi-stars"></i></div>
+        <div>
+            <div class="sb-brand-name">Wildcard</div>
+            <div class="sb-brand-sub">Studio</div>
+        </div>
+    </a>
+
+    <div class="sb-nav">
+        <div class="sb-label">工作區</div>
+        <a href="/" class="sb-item {{ 'active' if request.path in ['/', '/wildcards'] else '' }}">
+            <i class="bi bi-collection"></i> Wildcards
+        </a>
+        <a href="/prompt-builder" class="sb-item {{ 'active' if request.path == '/prompt-builder' else '' }}">
+            <i class="bi bi-pencil-square"></i> 提示詞建構器
+        </a>
+        <a href="/comfy-workflows" class="sb-item {{ 'active' if request.path == '/comfy-workflows' else '' }}">
+            <i class="bi bi-cpu"></i> ComfyUI 工作流
+        </a>
+
+        <div class="sb-divider"></div>
+        <div class="sb-label">資料</div>
+        <a href="/import" class="sb-item {{ 'active' if request.path == '/import' else '' }}">
+            <i class="bi bi-upload"></i> 匯入
+        </a>
+        <a href="/export" class="sb-item {{ 'active' if request.path == '/export' else '' }}">
+            <i class="bi bi-download"></i> 匯出
+        </a>
+
+        <div class="sb-divider"></div>
+        <a href="/translation-settings" class="sb-item {{ 'active' if request.path == '/translation-settings' else '' }}">
+            <i class="bi bi-gear"></i> 設定
+        </a>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
-    {% block extra_js %}{% endblock %}
+    <div class="sb-footer">
+        <button class="sb-ai-btn" id="ai-panel-toggle">
+            <i class="bi bi-robot"></i> AI 助手
+        </button>
+        <button class="sb-dark-btn" id="dark-mode-toggle">
+            <i class="bi bi-moon" id="dm-icon"></i>
+            <span id="dm-label">深色模式</span>
+        </button>
+    </div>
+</nav>
+
+
+<!-- ═══════════════ AI PANEL ══════════════════════════════════ -->
+<div id="ai-overlay"></div>
+
+<div id="ai-panel">
+    <!-- Header -->
+    <div style="display:flex;align-items:center;padding:.85rem 1rem;border-bottom:1px solid #374151;flex-shrink:0;">
+        <i class="bi bi-chat-dots-fill" style="color:#a78bfa;margin-right:.5rem;"></i>
+        <span style="color:#f9fafb;font-weight:600;font-size:.95rem;flex:1;">AI 助手</span>
+        <button id="ai-clear-btn" style="background:none;border:1px solid #4b5563;color:#9ca3af;font-size:.75rem;padding:.2rem .6rem;border-radius:6px;cursor:pointer;margin-right:.5rem;">清除</button>
+        <button id="ai-gear-btn" style="background:none;border:1px solid #4b5563;color:#9ca3af;font-size:.8rem;padding:.2rem .5rem;border-radius:6px;cursor:pointer;margin-right:.5rem;" title="LLM 設定"><i class="bi bi-gear"></i></button>
+        <button id="ai-close-btn" style="background:none;border:none;color:#9ca3af;font-size:1.1rem;cursor:pointer;line-height:1;">✕</button>
+    </div>
+
+    <!-- Profile selector -->
+    <div id="ai-profile-bar" style="display:none;padding:.6rem 1rem;background:#1f2937;border-bottom:1px solid #374151;flex-shrink:0;">
+        <div style="display:flex;align-items:center;gap:.5rem;">
+            <select id="ai-profile-select" style="flex:1;background:#374151;color:#f9fafb;border:1px solid #4b5563;border-radius:6px;padding:.25rem .5rem;font-size:.8rem;"></select>
+            <button id="ai-profile-save" style="background:#7c3aed;color:#fff;border:none;border-radius:6px;padding:.25rem .75rem;font-size:.8rem;cursor:pointer;">套用</button>
+        </div>
+        <div id="ai-profile-label" style="color:#6b7280;font-size:.72rem;margin-top:.3rem;"></div>
+    </div>
+
+    <!-- Messages -->
+    <div id="ai-messages" style="flex:1;overflow-y:auto;padding:1rem;display:flex;flex-direction:column;gap:.6rem;"></div>
+
+    <!-- Image preview bar -->
+    <div id="ai-img-bar" style="display:none;padding:.4rem 1rem;background:#1f2937;border-top:1px solid #374151;flex-shrink:0;">
+        <div style="display:flex;align-items:center;gap:.5rem;">
+            <img id="ai-img-thumb" src="" style="width:40px;height:40px;object-fit:cover;border-radius:4px;">
+            <span id="ai-img-name" style="color:#9ca3af;font-size:.78rem;flex:1;"></span>
+            <span id="ai-img-remove" style="color:#ef4444;cursor:pointer;font-size:.85rem;">✕</span>
+        </div>
+    </div>
+
+    <!-- Input area -->
+    <div style="padding:.75rem 1rem 1rem;flex-shrink:0;border-top:1px solid #374151;">
+        <div style="display:flex;align-items:flex-end;gap:.5rem;background:#1f2937;border-radius:14px;padding:.5rem .75rem;">
+            <button id="ai-img-btn" title="附加圖片" style="background:none;border:none;color:#6b7280;cursor:pointer;font-size:1.1rem;padding:.1rem;flex-shrink:0;align-self:flex-end;margin-bottom:.1rem;">
+                <i class="bi bi-plus-circle"></i>
+            </button>
+            <textarea id="ai-input" rows="1" placeholder="問我任何問題..." style="
+                flex:1;background:none;border:none;color:#f9fafb;resize:none;
+                font-size:.88rem;line-height:1.5;max-height:100px;overflow-y:auto;
+                padding:.1rem 0;outline:none;font-family:inherit;"></textarea>
+            <button id="ai-send-btn" style="
+                background:#7c3aed;color:#fff;border:none;border-radius:9px;
+                padding:.35rem .8rem;font-size:.82rem;cursor:pointer;flex-shrink:0;
+                align-self:flex-end;font-family:inherit;">發送</button>
+        </div>
+    </div>
+</div>
+
+<!-- AI image zoom -->
+<div id="ai-zoom" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:1060;align-items:center;justify-content:center;cursor:zoom-out;">
+    <img id="ai-zoom-img" src="" style="max-width:90vw;max-height:90vh;border-radius:8px;">
+</div>
+
+<input type="file" id="ai-file-input" accept="image/*" style="display:none;">
+
+
+<!-- ═══════════════ MAIN CONTENT ══════════════════════════════ -->
+<div id="main-wrap">
+    {% block fullpage %}
+    <div class="px-4 py-3">
+        {% block content %}{% endblock %}
+    </div>
+    {% endblock %}
+</div>
+
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+{% block extra_js %}{% endblock %}
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const panel      = document.getElementById('ai-panel');
+    const overlay    = document.getElementById('ai-overlay');
+    const toggleBtn  = document.getElementById('ai-panel-toggle');
+    const closeBtn   = document.getElementById('ai-close-btn');
+    const clearBtn   = document.getElementById('ai-clear-btn');
+    const gearBtn    = document.getElementById('ai-gear-btn');
+    const profileBar = document.getElementById('ai-profile-bar');
+    const profileSel = document.getElementById('ai-profile-select');
+    const profileSav = document.getElementById('ai-profile-save');
+    const profileLbl = document.getElementById('ai-profile-label');
+    const msgsEl     = document.getElementById('ai-messages');
+    const inputEl    = document.getElementById('ai-input');
+    const sendBtn    = document.getElementById('ai-send-btn');
+    const imgBtn     = document.getElementById('ai-img-btn');
+    const fileInput  = document.getElementById('ai-file-input');
+    const imgBar     = document.getElementById('ai-img-bar');
+    const imgThumb   = document.getElementById('ai-img-thumb');
+    const imgName    = document.getElementById('ai-img-name');
+    const imgRemove  = document.getElementById('ai-img-remove');
+    const zoomEl     = document.getElementById('ai-zoom');
+    const zoomImg    = document.getElementById('ai-zoom-img');
+
+    let history = [], sending = false, pendingImg = null, allProfiles = [], panelOpen = false;
+
+    function openPanel() {
+        panel.style.right = '0';
+        overlay.style.display = 'block';
+        panelOpen = true;
+        if (!msgsEl.children.length) addWelcome();
+        inputEl.focus();
+        loadSettings();
+    }
+    function closePanel() {
+        panel.style.right = '-400px';
+        overlay.style.display = 'none';
+        panelOpen = false;
+    }
+
+    toggleBtn.addEventListener('click', () => panelOpen ? closePanel() : openPanel());
+    closeBtn.addEventListener('click', closePanel);
+    overlay.addEventListener('click', closePanel);
+
+    function addWelcome() {
+        appendMsg('bot', '您好！我是 Wildcard AI 助手 🤖\n可以幫你搜尋 wildcard、建議組合、生成含佔位符的提示詞。\n支援傳送圖片（最大 2MB）一起提問。');
+    }
+
+    clearBtn.addEventListener('click', () => {
+        history = []; clearImg(); msgsEl.innerHTML = ''; addWelcome();
+    });
+
+    gearBtn.addEventListener('click', () => {
+        profileBar.style.display = profileBar.style.display === 'none' ? 'block' : 'none';
+    });
+
+    async function loadSettings() {
+        try {
+            const r = await fetch('/api/assistant/settings');
+            const d = await r.json();
+            allProfiles = d.profiles || [];
+            profileSel.innerHTML = '<option value="">— 請選擇 —</option>';
+            allProfiles.forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p.id;
+                opt.textContent = `${p.name} (${p.provider}/${p.model_name || '?'})`;
+                if (p.id === d.current_profile_id) opt.selected = true;
+                profileSel.appendChild(opt);
+            });
+            profileLbl.textContent = d.current_profile_name ? `使用：${d.current_profile_name}` : '⚠ 尚未設定 LLM';
+        } catch(e) { /* ignore */ }
+    }
+
+    profileSav.addEventListener('click', async () => {
+        const id = parseInt(profileSel.value) || null;
+        await fetch('/api/assistant/settings', {
+            method: 'PUT', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({profile_id: id})
+        });
+        const p = allProfiles.find(x => x.id === id);
+        profileLbl.textContent = p ? `使用：${p.name}` : '⚠ 尚未設定 LLM';
+        profileBar.style.display = 'none';
+    });
+
+    imgBtn.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', () => {
+        const file = fileInput.files[0];
+        if (!file) return;
+        if (file.size > 2 * 1024 * 1024) { alert('圖片不能超過 2MB'); return; }
+        const reader = new FileReader();
+        reader.onload = e => {
+            pendingImg = e.target.result;
+            imgThumb.src = pendingImg;
+            imgName.textContent = file.name;
+            imgBar.style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+        fileInput.value = '';
+    });
+    imgRemove.addEventListener('click', clearImg);
+    function clearImg() {
+        pendingImg = null; imgBar.style.display = 'none';
+        imgThumb.src = ''; imgName.textContent = '';
+    }
+
+    zoomEl.addEventListener('click', () => { zoomEl.style.display = 'none'; });
+    function openZoom(src) { zoomImg.src = src; zoomEl.style.display = 'flex'; }
+
+    inputEl.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+    });
+    inputEl.addEventListener('input', () => {
+        inputEl.style.height = 'auto';
+        inputEl.style.height = Math.min(inputEl.scrollHeight, 100) + 'px';
+    });
+    sendBtn.addEventListener('click', sendMessage);
+
+    async function sendMessage() {
+        const msg = inputEl.value.trim();
+        if ((!msg && !pendingImg) || sending) return;
+        sending = true;
+        const imgToSend = pendingImg;
+        inputEl.value = ''; inputEl.style.height = 'auto';
+        sendBtn.disabled = true; clearImg();
+        appendMsg('user', msg || '（圖片）', [], imgToSend);
+        const typingEl = appendTyping();
+        try {
+            const body = {message: msg || '請描述這張圖片', history};
+            if (imgToSend) body.image = imgToSend;
+            const r = await fetch('/api/assistant/chat', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(body)
+            });
+            const d = await r.json();
+            typingEl.remove();
+            if (d.error) {
+                appendMsg('bot', '⚠️ ' + d.error);
+            } else {
+                appendMsg('bot', d.reply, d.wildcards || [], null, d.actions || []);
+                history.push({role: 'user', content: msg || '請描述這張圖片'});
+                history.push({role: 'assistant', content: d.reply});
+                if (history.length > 20) history = history.slice(-20);
+            }
+        } catch(e) { typingEl.remove(); appendMsg('bot', '⚠️ 網路錯誤，請重試。'); }
+        sending = false; sendBtn.disabled = false; inputEl.focus();
+    }
+
+    function escHtml(s) {
+        const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML;
+    }
+
+    function appendMsg(role, text, wildcards = [], image = null, actions = []) {
+        const isUser = role === 'user';
+        const wrap = document.createElement('div');
+        wrap.style.cssText = `display:flex;align-items:flex-start;gap:.5rem;${isUser ? 'flex-direction:row-reverse;' : ''}`;
+        const avatar = document.createElement('div');
+        avatar.style.cssText = 'width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.8rem;flex-shrink:0;';
+        if (isUser) { avatar.style.background = '#7c3aed'; avatar.style.color = '#fff'; avatar.innerHTML = '<i class="bi bi-person-fill"></i>'; }
+        else { avatar.style.background = '#374151'; avatar.style.color = '#a78bfa'; avatar.innerHTML = '<i class="bi bi-robot"></i>'; }
+        const inner = document.createElement('div');
+        inner.style.cssText = 'max-width:82%;display:flex;flex-direction:column;gap:.3rem;';
+        const bubble = document.createElement('div');
+        bubble.style.cssText = `padding:.5rem .85rem;border-radius:14px;font-size:.85rem;line-height:1.5;word-break:break-word;white-space:pre-wrap;${isUser ? 'background:#7c3aed;color:#fff;border-bottom-right-radius:3px;' : 'background:#1f2937;color:#e5e7eb;border:1px solid #374151;border-bottom-left-radius:3px;'}`;
+        if (image) {
+            const imgEl = document.createElement('img');
+            imgEl.src = image; imgEl.style.cssText = 'max-width:180px;max-height:150px;border-radius:6px;display:block;cursor:zoom-in;margin-bottom:.25rem;';
+            imgEl.addEventListener('click', () => openZoom(image));
+            bubble.appendChild(imgEl);
+            if (text && text !== '（圖片）') { const t = document.createElement('div'); t.textContent = text; bubble.appendChild(t); }
+        } else { bubble.textContent = text; }
+        inner.appendChild(bubble);
+        if (actions.length) {
+            const log = document.createElement('div');
+            log.style.cssText = 'background:#1a2e1a;border:1px solid #166534;border-radius:8px;padding:.4rem .7rem;font-size:.75rem;color:#86efac;';
+            log.innerHTML = actions.map(a => escHtml(a)).join('<br>');
+            inner.appendChild(log);
+        }
+        if (isUser) { wrap.appendChild(inner); wrap.appendChild(avatar); }
+        else { wrap.appendChild(avatar); wrap.appendChild(inner); }
+        msgsEl.appendChild(wrap); msgsEl.scrollTop = msgsEl.scrollHeight;
+        return wrap;
+    }
+
+    // ── Dark mode ────────────────────────────────────────────────
+    const dmToggle = document.getElementById('dark-mode-toggle');
+    const dmIcon   = document.getElementById('dm-icon');
+    const dmLabel  = document.getElementById('dm-label');
+
+    function applyTheme(dark) {
+        if (dark) {
+            document.documentElement.setAttribute('data-bs-theme', 'dark');
+            dmIcon.className  = 'bi bi-sun';
+            dmLabel.textContent = '淺色模式';
+        } else {
+            document.documentElement.removeAttribute('data-bs-theme');
+            dmIcon.className  = 'bi bi-moon';
+            dmLabel.textContent = '深色模式';
+        }
+    }
+
+    // Apply saved preference immediately
+    applyTheme(localStorage.getItem('theme') === 'dark');
+
+    dmToggle.addEventListener('click', () => {
+        const isDark = document.documentElement.getAttribute('data-bs-theme') === 'dark';
+        localStorage.setItem('theme', isDark ? 'light' : 'dark');
+        applyTheme(!isDark);
+    });
+
+    function appendTyping() {
+        const wrap = document.createElement('div');
+        wrap.style.cssText = 'display:flex;align-items:flex-start;gap:.5rem;';
+        wrap.innerHTML = `
+            <div style="width:28px;height:28px;border-radius:50%;background:#374151;color:#a78bfa;display:flex;align-items:center;justify-content:center;font-size:.8rem;flex-shrink:0;">
+                <i class="bi bi-robot"></i></div>
+            <div style="background:#1f2937;border:1px solid #374151;border-radius:14px;border-bottom-left-radius:3px;padding:.6rem 1rem;">
+                <span class="ai-dot"></span><span class="ai-dot"></span><span class="ai-dot"></span></div>`;
+        msgsEl.appendChild(wrap); msgsEl.scrollTop = msgsEl.scrollHeight;
+        return wrap;
+    }
+});
+</script>
 </body>
 </html>

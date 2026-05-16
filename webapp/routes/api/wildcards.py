@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 from flask import Blueprint, request, jsonify, current_app
+from sqlalchemy import func
+from sqlalchemy.orm import joinedload
 from webapp.models import db, Wildcard, Category
-from webapp.services import wildcard_service, translation_service
-from webapp.services.category_service import get_comfy_wildcard_path, get_comfy_filepath_for_category
+from webapp.services import translation_service
 
 wildcards_bp = Blueprint('wildcards', __name__)
 
@@ -11,19 +12,24 @@ wildcards_bp = Blueprint('wildcards', __name__)
 def api_get_wildcards():
     """獲取 Wildcard 列表（支援分頁和篩選）"""
     page = request.args.get('page', 1, type=int)
-    per_page = request.args.get('per_page', 50, type=int)
+    per_page = min(request.args.get('per_page', 50, type=int), 500)
     category_id = request.args.get('category_id', type=int)
     search = request.args.get('search', '')
     is_active = request.args.get('is_active', type=str)
     untranslated_first = request.args.get('untranslated_first', 'false').lower() == 'true'
 
-    query = Wildcard.query
+    query = Wildcard.query.options(joinedload(Wildcard.category))
 
     if category_id:
         query = query.filter_by(category_id=category_id)
 
     if search:
-        query = query.filter(Wildcard.content.ilike(f'%{search}%'))
+        query = query.filter(
+            db.or_(
+                Wildcard.content.ilike(f'%{search}%'),
+                Wildcard.content_zh.ilike(f'%{search}%')
+            )
+        )
 
     if is_active is not None:
         query = query.filter_by(is_active=is_active.lower() == 'true')
@@ -68,9 +74,6 @@ def api_create_wildcard():
         notes=data.get('notes')
     )
     db.session.add(wildcard)
-    db.session.flush()
-    if wildcard.is_active:
-        wildcard_service.sync_active_to_comfy(wildcard)
     db.session.commit()
     return jsonify(wildcard.to_dict()), 201
 
@@ -88,14 +91,7 @@ def api_update_wildcard(wildcard_id):
     wildcard = Wildcard.query.get_or_404(wildcard_id)
     data = request.json
 
-    original_is_active = wildcard.is_active
-    new_is_active = data.get('is_active', original_is_active)
-
-    if new_is_active != original_is_active:
-        if new_is_active:
-            wildcard_service.sync_active_to_comfy(wildcard)
-        else:
-            wildcard_service.remove_from_comfy(wildcard)
+    new_is_active = data.get('is_active', wildcard.is_active)
 
     wildcard.content = data.get('content', wildcard.content)
     wildcard.content_zh = data.get('content_zh', wildcard.content_zh)
@@ -113,8 +109,6 @@ def api_update_wildcard(wildcard_id):
 def api_delete_wildcard(wildcard_id):
     """刪除 Wildcard"""
     wildcard = Wildcard.query.get_or_404(wildcard_id)
-    if wildcard.is_active:
-        wildcard_service.remove_from_comfy(wildcard)
     db.session.delete(wildcard)
     db.session.commit()
     return '', 204
@@ -149,20 +143,34 @@ def api_batch_update_category():
     if not category:
         return jsonify({'error': '目標分類不存在'}), 404
 
-    updated_count = Wildcard.query.filter(Wildcard.id.in_(ids)).update(
-        {'category_id': category_id}, synchronize_session=False
-    )
-    db.session.commit()
+    wildcards = Wildcard.query.filter(Wildcard.id.in_(ids)).all()
+    existing_contents = {w.content for w in Wildcard.query.filter_by(category_id=category_id).all()}
 
-    return jsonify({
-        'message': f'成功將 {updated_count} 個 wildcards 移動到分類 "{category.display_name}"',
-        'updated': updated_count
-    })
+    updated = 0
+    skipped = 0
+    for w in wildcards:
+        if w.content in existing_contents:
+            skipped += 1
+        else:
+            w.category_id = category_id
+            existing_contents.add(w.content)
+            updated += 1
+
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'遷移失敗：{e}'}), 500
+
+    msg = f'成功移動 {updated} 個至「{category.display_name}」'
+    if skipped:
+        msg += f'，{skipped} 個因重複略過'
+    return jsonify({'message': msg, 'updated': updated, 'skipped': skipped})
 
 
 @wildcards_bp.route('/batch-update-active', methods=['POST'])
 def api_batch_update_active():
-    """批量更新 Wildcard 的啟用狀態，並同步到 ComfyUI 檔案系統"""
+    """批量更新 Wildcard 的啟用狀態"""
     data = request.json
     ids = data.get('ids', [])
     is_active = data.get('is_active')
@@ -170,55 +178,16 @@ def api_batch_update_active():
     if not ids or is_active is None:
         return jsonify({'error': '缺少必要參數: ids 和 is_active'}), 400
 
-    wildcards = Wildcard.query.filter(Wildcard.id.in_(ids)).all()
-
-    if not wildcards:
-        return jsonify({'error': '找不到要更新的 wildcards'}), 404
-
-    updated_count = 0
-    error_count = 0
-    comfy_path_str = get_comfy_wildcard_path()
-
-    for wildcard in wildcards:
-        if wildcard.is_active == is_active:
-            continue
-
-        if comfy_path_str and wildcard.category:
-            dir_path, filename = get_comfy_filepath_for_category(wildcard.category, comfy_path_str)
-            filepath = dir_path / filename
-
-            try:
-                if is_active:
-                    dir_path.mkdir(parents=True, exist_ok=True)
-                    with open(filepath, 'a', encoding='utf-8') as f:
-                        f.write(f"\n{wildcard.content}")
-                else:
-                    if filepath.exists():
-                        with open(filepath, 'r', encoding='utf-8') as f:
-                            lines = f.readlines()
-                        with open(filepath, 'w', encoding='utf-8') as f:
-                            for line in lines:
-                                if line.strip() != wildcard.content:
-                                    f.write(line)
-            except Exception as e:
-                print(f"批次更新檔案操作失敗: {e}")
-                error_count += 1
-                continue
-
-        wildcard.is_active = is_active
-        updated_count += 1
-
+    updated_count = Wildcard.query.filter(Wildcard.id.in_(ids)).update(
+        {'is_active': is_active}, synchronize_session=False
+    )
     db.session.commit()
 
     action = '啟用' if is_active else '停用'
-    message = f'成功{action} {updated_count} 個 wildcards'
-    if error_count > 0:
-        message += f'，{error_count} 個項目檔案同步失敗'
-
     return jsonify({
-        'message': message,
+        'message': f'成功{action} {updated_count} 個 wildcards',
         'updated': updated_count,
-        'errors': error_count
+        'errors': 0
     })
 
 
@@ -246,6 +215,140 @@ def api_translate_wildcard(wildcard_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
+
+
+@wildcards_bp.route('/<int:wildcard_id>/optimize', methods=['POST'])
+def api_optimize_wildcard(wildcard_id):
+    """優化單個 Wildcard tag (Danbooru 規範 + 中文說明)"""
+    wildcard = Wildcard.query.get_or_404(wildcard_id)
+    try:
+        from webapp.services import optimization_service
+        result = optimization_service.optimize(wildcard.content)
+        if result:
+            wildcard.content = result['tag']
+            wildcard.content_zh = result['zh']
+            wildcard.translation_status = 'translated'
+            db.session.commit()
+            return jsonify({'id': wildcard.id, 'content': result['tag'], 'content_zh': result['zh']})
+        else:
+            return jsonify({'error': '優化返回空結果'}), 500
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 503
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@wildcards_bp.route('/batch-optimize', methods=['POST'])
+def api_batch_optimize_wildcards():
+    """批量優化 Wildcard tags"""
+    data = request.json
+    ids = data.get('ids', [])
+    if not ids:
+        return jsonify({'error': '未提供 ID'}), 400
+
+    try:
+        from webapp.services import optimization_service
+        wildcards_to_process = Wildcard.query.filter(Wildcard.id.in_(ids)).all()
+        texts = [w.content for w in wildcards_to_process]
+        results = optimization_service.batch_optimize(texts)
+
+        optimized_count = 0
+        failed_count = 0
+        for wildcard, result in zip(wildcards_to_process, results):
+            if result:
+                wildcard.content = result['tag']
+                wildcard.content_zh = result['zh']
+                wildcard.translation_status = 'translated'
+                optimized_count += 1
+            else:
+                failed_count += 1
+
+        db.session.commit()
+        return jsonify({'optimized': optimized_count, 'failed': failed_count})
+
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 503
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@wildcards_bp.route('/duplicates', methods=['GET'])
+def api_get_duplicates():
+    """找出大小寫不同但重複的 wildcard 群組"""
+    key_col = func.lower(Wildcard.content).label('lower_key')
+    dup_keys = (
+        db.session.query(func.lower(Wildcard.content))
+        .group_by(func.lower(Wildcard.content))
+        .having(func.count(Wildcard.id) > 1)
+        .all()
+    )
+    dup_keys = [row[0] for row in dup_keys]
+
+    groups = []
+    for key in dup_keys:
+        wildcards = (
+            Wildcard.query
+            .filter(func.lower(Wildcard.content) == key)
+            .order_by(Wildcard.content)
+            .all()
+        )
+        groups.append({
+            'key': key,
+            'items': [
+                {
+                    'id': w.id,
+                    'content': w.content,
+                    'content_zh': w.content_zh or '',
+                    'category_id': w.category_id,
+                    'category_name': w.category.display_name if w.category else '',
+                    'is_active': w.is_active,
+                }
+                for w in wildcards
+            ]
+        })
+
+    return jsonify({'total_groups': len(groups), 'groups': groups})
+
+
+@wildcards_bp.route('/deduplicate', methods=['POST'])
+def api_deduplicate():
+    """自動去重：每組保留小寫版本（或第一筆），刪除其餘"""
+    data = request.json or {}
+    keep_ids = data.get('keep_ids', [])   # 手動指定每組要保留的 ID
+    delete_ids = data.get('delete_ids', [])  # 手動指定要刪除的 ID
+
+    if not keep_ids and not delete_ids:
+        # 自動模式：找出所有重複群組，每組保留 content 最接近純小寫的那筆
+        dup_keys = (
+            db.session.query(func.lower(Wildcard.content))
+            .group_by(func.lower(Wildcard.content))
+            .having(func.count(Wildcard.id) > 1)
+            .all()
+        )
+        to_delete = []
+        for (key,) in dup_keys:
+            wildcards = (
+                Wildcard.query
+                .filter(func.lower(Wildcard.content) == key)
+                .order_by(Wildcard.content)
+                .all()
+            )
+            # prefer exact lowercase match, else first entry
+            keep = next((w for w in wildcards if w.content == key), wildcards[0])
+            to_delete.extend(w.id for w in wildcards if w.id != keep.id)
+
+        if to_delete:
+            Wildcard.query.filter(Wildcard.id.in_(to_delete)).delete(synchronize_session=False)
+            db.session.commit()
+        return jsonify({'deleted': len(to_delete)})
+
+    # 手動模式：直接刪除指定 IDs
+    if delete_ids:
+        Wildcard.query.filter(Wildcard.id.in_(delete_ids)).delete(synchronize_session=False)
+        db.session.commit()
+    return jsonify({'deleted': len(delete_ids)})
 
 
 @wildcards_bp.route('/batch-translate', methods=['POST'])

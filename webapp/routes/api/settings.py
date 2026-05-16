@@ -21,43 +21,6 @@ def api_stats():
     })
 
 
-@settings_bp.route('/settings/comfy-path', methods=['GET'])
-def api_get_comfy_path():
-    """獲取 ComfyUI Wildcard 監控路徑"""
-    try:
-        from webapp.services.category_service import get_comfy_wildcard_path
-        current_path = get_comfy_wildcard_path()
-        return jsonify({'path': current_path})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
-@settings_bp.route('/settings/comfy-path', methods=['PUT'])
-def api_update_comfy_path():
-    """更新 ComfyUI Wildcard 監控路徑"""
-    try:
-        data = request.json
-        new_path = data.get('path')
-        if not new_path:
-            return jsonify({'error': '缺少路徑參數'}), 400
-
-        setting = AppSetting.query.filter_by(key='comfyui_wildcard_path').first()
-        if setting:
-            setting.value = new_path
-        else:
-            setting = AppSetting(key='comfyui_wildcard_path', value=new_path)
-            db.session.add(setting)
-
-        db.session.commit()
-
-        # Update runtime config
-        current_app.config['COMFYUI_WILDCARD_PATH'] = new_path
-
-        return jsonify({'message': 'ComfyUI 監控路徑已更新', 'path': new_path})
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 500
-
 
 @settings_bp.route('/data/clear', methods=['POST'])
 def api_clear_all_data():
@@ -171,6 +134,46 @@ def api_test_translation_settings():
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@settings_bp.route('/translation-settings/system-prompt', methods=['GET'])
+def api_get_shared_system_prompt():
+    setting = AppSetting.query.filter_by(key='translation_system_prompt').first()
+    return jsonify({'system_prompt': setting.value if setting else ''})
+
+
+@settings_bp.route('/translation-settings/system-prompt', methods=['PUT'])
+def api_save_shared_system_prompt():
+    data = request.json or {}
+    prompt = data.get('system_prompt', '')
+    setting = AppSetting.query.filter_by(key='translation_system_prompt').first()
+    if setting:
+        setting.value = prompt
+    else:
+        setting = AppSetting(key='translation_system_prompt', value=prompt)
+        db.session.add(setting)
+    db.session.commit()
+    return jsonify({'message': '共用提示詞已儲存'})
+
+
+@settings_bp.route('/translation-settings/optimization-prompt', methods=['GET'])
+def api_get_optimization_prompt():
+    setting = AppSetting.query.filter_by(key='optimization_system_prompt').first()
+    return jsonify({'system_prompt': setting.value if setting else ''})
+
+
+@settings_bp.route('/translation-settings/optimization-prompt', methods=['PUT'])
+def api_save_optimization_prompt():
+    data = request.json or {}
+    prompt = data.get('system_prompt', '')
+    setting = AppSetting.query.filter_by(key='optimization_system_prompt').first()
+    if setting:
+        setting.value = prompt
+    else:
+        setting = AppSetting(key='optimization_system_prompt', value=prompt)
+        db.session.add(setting)
+    db.session.commit()
+    return jsonify({'message': '優化提示詞已儲存'})
 
 
 @settings_bp.route('/translation-settings/openai/probe-models', methods=['POST'])

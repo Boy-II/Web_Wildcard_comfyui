@@ -36,6 +36,7 @@ services:
       - ./init_categories.py:/app/init_categories.py
       - ./bulk_import.py:/app/bulk_import.py
       - ./migrate_flatten_categories.py:/app/migrate_flatten_categories.py
+      - ./migrate_content_to_text.py:/app/migrate_content_to_text.py
       # 資料與日誌持久化
       - ./data:/app/data
       - ./logs:/app/logs

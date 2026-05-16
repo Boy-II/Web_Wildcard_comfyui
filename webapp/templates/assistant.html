@@ -1,0 +1,456 @@
+{% extends "base.html" %}
+{% block title %}AI 助手 - Wildcard 管理系統{% endblock %}
+
+{% block extra_css %}
+<style>
+/* Override base container padding for full-height chat */
+.container-fluid { padding-top: .5rem !important; padding-bottom: 0 !important; }
+
+#assistant-wrap {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 72px);
+}
+#chat-toolbar {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    padding: .3rem 0 .4rem;
+    flex-shrink: 0;
+}
+#chat-toolbar .title { font-weight: 600; font-size: .95rem; flex: 1; }
+#messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: .75rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border: 1px solid #dee2e6;
+}
+.msg-wrap { display: flex; margin-bottom: .6rem; align-items: flex-start; }
+.msg-wrap.user { flex-direction: row-reverse; }
+.msg-bubble {
+    max-width: 80%;
+    padding: .45rem .8rem;
+    border-radius: 14px;
+    line-height: 1.45;
+    font-size: .9rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.msg-wrap.user  .msg-bubble { background: #0d6efd; color: #fff; border-bottom-right-radius: 3px; }
+.msg-wrap.bot   .msg-bubble { background: #fff; border: 1px solid #dee2e6; border-bottom-left-radius: 3px; }
+.msg-avatar {
+    width: 28px; height: 28px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: .85rem; flex-shrink: 0;
+}
+.msg-wrap.user .msg-avatar { background: #0d6efd; color: #fff; margin-left: .4rem; }
+.msg-wrap.bot  .msg-avatar { background: #e9ecef; margin-right: .4rem; }
+
+.wc-results { margin-top: .35rem; display: flex; flex-wrap: wrap; gap: .25rem; }
+.wc-chip {
+    font-size: .75rem; padding: .15rem .5rem;
+    border-radius: 999px; border: 1px solid #ced4da;
+    background: #f8f9fa; cursor: pointer;
+    transition: background .15s;
+}
+.wc-chip:hover { background: #e9ecef; }
+.wc-chip .zh { color: #6c757d; font-size: .7rem; }
+
+#quick-chips {
+    display: flex; gap: .35rem; flex-wrap: wrap;
+    padding: .3rem 0; flex-shrink: 0;
+}
+.quick-chip {
+    padding: .2rem .65rem; border-radius: 999px;
+    border: 1px solid #0d6efd; color: #0d6efd;
+    background: #fff; cursor: pointer; font-size: .78rem;
+    transition: all .15s;
+}
+.quick-chip:hover { background: #0d6efd; color: #fff; }
+
+#input-wrap { padding-top: .4rem; padding-bottom: .6rem; flex-shrink: 0; }
+#image-preview-bar {
+    display: none; align-items: center; gap: .4rem;
+    padding: .3rem .4rem; background: #f1f3f5;
+    border-radius: 8px 8px 0 0; border: 1px solid #dee2e6; border-bottom: none;
+}
+#image-preview-bar img { height: 48px; width: 48px; object-fit: cover; border-radius: 4px; }
+#image-preview-bar .remove-img {
+    cursor: pointer; color: #dc3545; font-size: .85rem;
+    line-height: 1; padding: .1rem .25rem;
+}
+#input-area { display: flex; gap: .4rem; }
+#user-input {
+    flex: 1; border-radius: 20px; padding: .45rem 1rem;
+    border: 1px solid #ced4da; resize: none; font-size: .9rem;
+    max-height: 100px; overflow-y: auto;
+}
+#image-preview-bar ~ #input-area #user-input { border-top-left-radius: 0; border-top-right-radius: 0; }
+#user-input:focus { outline: none; border-color: #0d6efd; box-shadow: 0 0 0 .15rem rgba(13,110,253,.15); }
+#btn-image {
+    border-radius: 50%; width: 38px; height: 38px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; align-self: flex-end;
+}
+#btn-send {
+    border-radius: 50%; width: 38px; height: 38px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; align-self: flex-end;
+}
+.msg-image { max-width: 220px; max-height: 180px; border-radius: 8px; margin-top: .3rem; display: block; cursor: zoom-in; }
+#img-zoom-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,.75);
+    z-index: 9999; align-items: center; justify-content: center; cursor: zoom-out;
+}
+#img-zoom-overlay img { max-width: 90vw; max-height: 90vh; border-radius: 8px; }
+.typing-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #adb5bd; margin: 0 2px; animation: bounce .9s infinite; }
+.typing-dot:nth-child(2) { animation-delay: .15s; }
+.typing-dot:nth-child(3) { animation-delay: .3s; }
+@keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-6px)} }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Profile Modal -->
+<div class="modal fade" id="profileModal" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title mb-0"><i class="bi bi-gear"></i> 助手 LLM 設定</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body py-2">
+                <label class="form-label small fw-bold mb-1">選擇設定檔</label>
+                <select class="form-select form-select-sm" id="profile-select">
+                    <option value="">— 請選擇 —</option>
+                </select>
+                <div class="form-text mt-1" id="profile-detail"></div>
+            </div>
+            <div class="modal-footer py-2">
+                <button class="btn btn-primary btn-sm" id="btn-save-profile">儲存</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="assistant-wrap">
+    <div id="chat-toolbar">
+        <i class="bi bi-robot text-primary"></i>
+        <span class="title">Wildcard AI 助手</span>
+        <span class="text-muted" style="font-size:.78rem;" id="current-profile-label"></span>
+        <button class="btn btn-sm btn-outline-secondary py-0 px-2" data-bs-toggle="modal" data-bs-target="#profileModal" title="LLM 設定">
+            <i class="bi bi-gear" style="font-size:.8rem;"></i>
+        </button>
+        <button class="btn btn-sm btn-outline-secondary py-0 px-2" id="btn-clear" title="清除對話">
+            <i class="bi bi-trash" style="font-size:.8rem;"></i>
+        </button>
+    </div>
+
+    <div id="quick-chips">
+        <span class="quick-chip" data-msg="幫我搜尋所有關於裙子的 wildcard">🔍 裙子 tag</span>
+        <span class="quick-chip" data-msg="幫我生成一個可愛女生角色的 Stable Diffusion 提示詞，使用現有的 wildcard 語法">✨ 可愛女生 prompt</span>
+        <span class="quick-chip" data-msg="目前系統有哪些分類？各有多少內容？">📁 所有分類</span>
+        <span class="quick-chip" data-msg="什麼是 Danbooru tag 規範？有哪些注意事項？">📖 Danbooru 規範</span>
+        <span class="quick-chip" data-msg="幫我推薦一些適合加入服裝分類的 Danbooru tag">👗 服裝 tag</span>
+    </div>
+
+    <div id="messages">
+        <div class="msg-wrap bot">
+            <div class="msg-avatar"><i class="bi bi-robot"></i></div>
+            <div>
+                <div class="msg-bubble">你好！我可以幫你搜尋 wildcard、建議分類、生成 prompt 或解答 Danbooru 規範問題。有什麼我可以幫你的嗎？</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="input-wrap">
+        <div id="image-preview-bar">
+            <img id="preview-thumb" src="" alt="preview">
+            <span class="text-muted small" id="preview-name"></span>
+            <span class="remove-img ms-auto" id="btn-remove-img" title="移除圖片"><i class="bi bi-x-circle-fill"></i></span>
+        </div>
+        <div id="input-area">
+            <button class="btn btn-outline-secondary" id="btn-image" title="附加圖片">
+                <i class="bi bi-image" style="font-size:.85rem;"></i>
+            </button>
+            <textarea id="user-input" rows="1" placeholder="輸入訊息，Enter 送出，Shift+Enter 換行..."></textarea>
+            <button class="btn btn-primary" id="btn-send"><i class="bi bi-send-fill" style="font-size:.85rem;"></i></button>
+        </div>
+        <input type="file" id="file-input" accept="image/*" style="display:none">
+    </div>
+</div>
+
+<!-- Image zoom overlay -->
+<div id="img-zoom-overlay"><img id="img-zoom-img" src="" alt=""></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const messagesEl = document.getElementById('messages');
+    const inputEl = document.getElementById('user-input');
+    const sendBtn = document.getElementById('btn-send');
+    const fileInput = document.getElementById('file-input');
+    const previewBar = document.getElementById('image-preview-bar');
+    const previewThumb = document.getElementById('preview-thumb');
+    const previewName = document.getElementById('preview-name');
+    let history = [];
+    let sending = false;
+    let pendingImage = null; // base64 data URL
+
+    // ── Image upload ─────────────────────────────────────────────
+    document.getElementById('btn-image').addEventListener('click', () => fileInput.click());
+
+    fileInput.addEventListener('change', () => {
+        const file = fileInput.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = e => {
+            pendingImage = e.target.result;
+            previewThumb.src = pendingImage;
+            previewName.textContent = file.name;
+            previewBar.style.display = 'flex';
+        };
+        reader.readAsDataURL(file);
+        fileInput.value = '';
+    });
+
+    document.getElementById('btn-remove-img').addEventListener('click', clearImage);
+
+    function clearImage() {
+        pendingImage = null;
+        previewBar.style.display = 'none';
+        previewThumb.src = '';
+        previewName.textContent = '';
+    }
+
+    // ── Image zoom overlay ───────────────────────────────────────
+    const zoomOverlay = document.getElementById('img-zoom-overlay');
+    const zoomImg = document.getElementById('img-zoom-img');
+    zoomOverlay.addEventListener('click', () => { zoomOverlay.style.display = 'none'; });
+    function openZoom(src) {
+        zoomImg.src = src;
+        zoomOverlay.style.display = 'flex';
+    }
+
+    // ── Quick chips ──────────────────────────────────────────────
+    document.querySelectorAll('.quick-chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+            inputEl.value = chip.dataset.msg;
+            sendMessage();
+        });
+    });
+
+    // ── Clear ────────────────────────────────────────────────────
+    document.getElementById('btn-clear').addEventListener('click', () => {
+        history = [];
+        clearImage();
+        messagesEl.innerHTML = `
+            <div class="msg-wrap bot">
+                <div class="msg-avatar"><i class="bi bi-robot"></i></div>
+                <div><div class="msg-bubble">對話已清除，有什麼可以幫你的？</div></div>
+            </div>`;
+        messagesEl.scrollTop = 0;
+    });
+
+    // ── Input handlers ───────────────────────────────────────────
+    inputEl.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    });
+    sendBtn.addEventListener('click', sendMessage);
+
+    // Auto-resize textarea
+    inputEl.addEventListener('input', () => {
+        inputEl.style.height = 'auto';
+        inputEl.style.height = Math.min(inputEl.scrollHeight, 100) + 'px';
+    });
+
+    // ── Send ─────────────────────────────────────────────────────
+    async function sendMessage() {
+        const msg = inputEl.value.trim();
+        if ((!msg && !pendingImage) || sending) return;
+
+        sending = true;
+        const imageToSend = pendingImage;
+        inputEl.value = '';
+        inputEl.style.height = 'auto';
+        sendBtn.disabled = true;
+        clearImage();
+
+        appendMessage('user', msg || '（圖片）', [], imageToSend);
+        const typingEl = appendTyping();
+
+        try {
+            const body = {message: msg || '請描述這張圖片', history};
+            if (imageToSend) body.image = imageToSend;
+
+            const r = await fetch('/api/assistant/chat', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(body)
+            });
+            const d = await r.json();
+            typingEl.remove();
+
+            if (d.error) {
+                appendMessage('bot', '⚠️ ' + d.error);
+            } else {
+                appendMessage('bot', d.reply, d.wildcards || []);
+                history.push({role: 'user', content: msg || '請描述這張圖片'});
+                history.push({role: 'assistant', content: d.reply});
+                if (history.length > 20) history = history.slice(-20);
+            }
+        } catch (e) {
+            typingEl.remove();
+            appendMessage('bot', '⚠️ 網路錯誤，請重試。');
+        }
+
+        sending = false;
+        sendBtn.disabled = false;
+        inputEl.focus();
+    }
+
+    // ── Render helpers ───────────────────────────────────────────
+    function appendMessage(role, text, wildcards = [], image = null) {
+        const isUser = role === 'user';
+        const wrap = document.createElement('div');
+        wrap.className = `msg-wrap ${isUser ? 'user' : 'bot'}`;
+
+        const avatar = document.createElement('div');
+        avatar.className = 'msg-avatar';
+        avatar.innerHTML = isUser ? '<i class="bi bi-person-fill"></i>' : '<i class="bi bi-robot"></i>';
+
+        const inner = document.createElement('div');
+
+        const bubble = document.createElement('div');
+        bubble.className = 'msg-bubble';
+
+        if (image) {
+            const imgEl = document.createElement('img');
+            imgEl.src = image;
+            imgEl.className = 'msg-image';
+            imgEl.addEventListener('click', () => openZoom(image));
+            bubble.appendChild(imgEl);
+            if (text && text !== '（圖片）') {
+                const t = document.createElement('div');
+                t.textContent = text;
+                t.style.marginTop = '.25rem';
+                bubble.appendChild(t);
+            }
+        } else {
+            bubble.textContent = text;
+        }
+        inner.appendChild(bubble);
+
+        // Wildcard result chips
+        if (wildcards.length) {
+            const chips = document.createElement('div');
+            chips.className = 'wc-results';
+            wildcards.forEach(w => {
+                const chip = document.createElement('span');
+                chip.className = 'wc-chip';
+                chip.title = `分類：${w.category}`;
+                chip.innerHTML = `<code>${escHtml(w.content)}</code>${w.content_zh ? ' <span class="zh">'+escHtml(w.content_zh)+'</span>' : ''}`;
+                chip.addEventListener('click', () => {
+                    navigator.clipboard.writeText(w.content).then(() => {
+                        chip.style.background = '#d1e7dd';
+                        setTimeout(() => chip.style.background = '', 1000);
+                    });
+                });
+                chips.appendChild(chip);
+            });
+            inner.appendChild(chips);
+        }
+
+        if (isUser) {
+            wrap.appendChild(inner);
+            wrap.appendChild(avatar);
+        } else {
+            wrap.appendChild(avatar);
+            wrap.appendChild(inner);
+        }
+
+        messagesEl.appendChild(wrap);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+        return wrap;
+    }
+
+    function appendTyping() {
+        const wrap = document.createElement('div');
+        wrap.className = 'msg-wrap bot';
+        wrap.innerHTML = `
+            <div class="msg-avatar"><i class="bi bi-robot"></i></div>
+            <div><div class="msg-bubble" style="padding:.8rem 1rem;">
+                <span class="typing-dot"></span>
+                <span class="typing-dot"></span>
+                <span class="typing-dot"></span>
+            </div></div>`;
+        messagesEl.appendChild(wrap);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+        return wrap;
+    }
+
+    function escHtml(s) {
+        const d = document.createElement('div');
+        d.textContent = s || '';
+        return d.innerHTML;
+    }
+
+    // ── Profile settings ─────────────────────────────────────────
+    let allProfiles = [];
+
+    async function loadSettings() {
+        const r = await fetch('/api/assistant/settings');
+        const d = await r.json();
+        allProfiles = d.profiles || [];
+
+        const sel = document.getElementById('profile-select');
+        sel.innerHTML = '<option value="">— 請選擇 —</option>';
+        allProfiles.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.id;
+            opt.textContent = `${p.name} (${p.provider} / ${p.model_name || '?'})`;
+            if (p.id === d.current_profile_id) opt.selected = true;
+            sel.appendChild(opt);
+        });
+
+        updateProfileLabel(d.current_profile_id, d.current_profile_name);
+    }
+
+    function updateProfileLabel(id, name) {
+        const el = document.getElementById('current-profile-label');
+        el.textContent = name ? `使用：${name}` : '未設定 LLM';
+        el.className = name ? 'text-muted small' : 'text-danger small';
+    }
+
+    document.getElementById('profile-select').addEventListener('change', function () {
+        const id = parseInt(this.value) || null;
+        const p = allProfiles.find(x => x.id === id);
+        document.getElementById('profile-detail').textContent =
+            p ? `Provider: ${p.provider}  Model: ${p.model_name || '?'}` : '';
+    });
+
+    document.getElementById('btn-save-profile').addEventListener('click', async () => {
+        const id = parseInt(document.getElementById('profile-select').value) || null;
+        const r = await fetch('/api/assistant/settings', {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({profile_id: id})
+        });
+        if (r.ok) {
+            const p = allProfiles.find(x => x.id === id);
+            updateProfileLabel(id, p ? p.name : null);
+            bootstrap.Modal.getInstance(document.getElementById('profileModal')).hide();
+        }
+    });
+
+    loadSettings();
+    inputEl.focus();
+})();
+</script>
+{% endblock %}

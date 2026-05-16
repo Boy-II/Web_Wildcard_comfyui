@@ -1,373 +1,551 @@
 {% extends "base.html" %}
-
-{% block title %}翻譯設定 - Wildcard 管理系統{% endblock %}
+{% block title %}設定 - Wildcard Studio{% endblock %}
 
 {% block extra_css %}
 <style>
+    .profile-card {
+        cursor: pointer;
+        border: 2px solid transparent;
+        transition: border-color .15s;
+    }
+    .profile-card:hover { border-color: #0d6efd44; }
+    .profile-card.selected { border-color: #0d6efd; }
+    .profile-card.active-profile { background: #f0f7ff; }
+    .provider-badge { font-size: 0.75rem; }
     .font-monospace { font-family: 'Courier New', Courier, monospace; }
-    .form-text { font-size: 0.875em; }
+    #profile-form-panel { display: none; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h2><i class="bi bi-gear-fill"></i> 翻譯設定</h2>
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2><i class="bi bi-gear-fill"></i> 設定</h2>
 </div>
 
-<!-- Active Provider Selector -->
-<div class="card mb-4">
-    <div class="card-header"><h5 class="mb-0"><i class="bi bi-power"></i> 啟用中的翻譯服務</h5></div>
-    <div class="card-body">
-        <div class="row align-items-center">
-            <div class="col-md-4">
-                <label class="form-label">選擇要使用的翻譯服務：</label>
-                <select id="activeProvider" class="form-select"></select>
+<div class="row g-3">
+    <!-- LEFT: Profile list -->
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span class="fw-bold"><i class="bi bi-collection"></i> 設定檔</span>
+                <button class="btn btn-sm btn-primary" id="btn-new-profile">
+                    <i class="bi bi-plus-lg"></i> 新增
+                </button>
             </div>
-            <div class="col-md-8">
-                <div id="activation-status" class="mt-2"></div>
+            <div class="card-body p-2" id="profile-list">
+                <div class="text-muted text-center py-3 small">載入中...</div>
             </div>
         </div>
     </div>
-</div>
 
-<!-- Provider Tabs -->
-<ul class="nav nav-tabs" id="providerTabs">
-    <li class="nav-item">
-        <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#ollama-pane" type="button">
-            <i class="bi bi-hdd-stack"></i> Ollama
-        </button>
-    </li>
-    <li class="nav-item">
-        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#gemini-pane" type="button">
-            <i class="bi bi-gem"></i> Google Gemini
-        </button>
-    </li>
-    <li class="nav-item">
-        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#openai-pane" type="button">
-            <i class="bi bi-cpu"></i> OpenAI-compatible
-        </button>
-    </li>
-</ul>
-
-<div class="tab-content">
-    <!-- Ollama -->
-    <div class="tab-pane fade show active" id="ollama-pane">
-        <div class="card card-body border-top-0">
-            <form id="ollamaSettingsForm" data-provider="ollama">
-                <div class="mb-3">
-                    <label class="form-label"><i class="bi bi-cpu"></i> 模型名稱</label>
-                    <input type="text" class="form-control" id="ollama-modelName" required>
-                    <div class="form-text">例如: qwen3:8b, llama3</div>
+    <!-- RIGHT: Edit form -->
+    <div class="col-md-8">
+        <!-- Placeholder when nothing selected -->
+        <div id="profile-placeholder" class="card h-100">
+            <div class="card-body d-flex align-items-center justify-content-center text-muted">
+                <div class="text-center">
+                    <i class="bi bi-arrow-left-circle" style="font-size:2rem;"></i>
+                    <p class="mt-2">選擇左側設定檔以編輯，或點「新增」建立一組新設定</p>
                 </div>
-                <div class="mb-3">
-                    <label class="form-label"><i class="bi bi-thermometer-half"></i> 溫度 (<span id="ollama-temperature-val">0.3</span>)</label>
-                    <input type="range" class="form-range" id="ollama-temperature" min="0" max="2" step="0.1">
-                </div>
-                <div class="mb-3">
-                    <label class="form-label"><i class="bi bi-chat-square-text"></i> 系統提示詞</label>
-                    <textarea class="form-control font-monospace" id="ollama-systemPrompt" rows="8" required></textarea>
-                </div>
-                <button type="submit" class="btn btn-primary"><i class="bi bi-save"></i> 儲存 Ollama 設定</button>
-            </form>
+            </div>
         </div>
-    </div>
 
-    <!-- Gemini -->
-    <div class="tab-pane fade" id="gemini-pane">
-        <div class="card card-body border-top-0">
-            <form id="geminiSettingsForm" data-provider="gemini">
-                <div class="mb-3">
-                    <label class="form-label"><i class="bi bi-key-fill"></i> API 金鑰</label>
-                    <input type="password" class="form-control" id="gemini-apiKey" placeholder="留空表示不更新">
-                    <div class="form-text">您的 API 金鑰已儲存。此處留空表示不更新。</div>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label"><i class="bi bi-cpu"></i> 模型名稱</label>
-                    <input type="text" class="form-control" id="gemini-modelName" required>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label"><i class="bi bi-thermometer-half"></i> 溫度 (<span id="gemini-temperature-val">0.3</span>)</label>
-                    <input type="range" class="form-range" id="gemini-temperature" min="0" max="1" step="0.1">
-                </div>
-                <div class="mb-3">
-                    <label class="form-label"><i class="bi bi-chat-square-text"></i> 系統提示詞</label>
-                    <textarea class="form-control font-monospace" id="gemini-systemPrompt" rows="8" required></textarea>
-                </div>
-                <button type="submit" class="btn btn-primary"><i class="bi bi-save"></i> 儲存 Gemini 設定</button>
-            </form>
-        </div>
-    </div>
-
-    <!-- OpenAI-compatible -->
-    <div class="tab-pane fade" id="openai-pane">
-        <div class="card card-body border-top-0">
-            <form id="openaiSettingsForm" data-provider="openai">
-                <div class="mb-3">
-                    <label class="form-label"><i class="bi bi-link-45deg"></i> Base URL</label>
-                    <input type="url" class="form-control" id="openai-baseUrl" placeholder="https://api.openai.com/v1" required>
-                    <div class="form-text">本地服務如 LM Studio 填入 <code>http://localhost:1234/v1</code>，Ollama /v1 填入 <code>http://localhost:11434/v1</code></div>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label"><i class="bi bi-key-fill"></i> API Key</label>
-                    <input type="password" class="form-control" id="openai-apiKey" placeholder="留空 = 無鑑權模式（相容 LM Studio、Ollama /v1 等本地服務）">
-                    <div class="form-text">留空表示不更新已儲存的 Key。完全省略 Authorization header（相容本地無鑑權服務）</div>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label"><i class="bi bi-cpu"></i> 模型</label>
-                    <div class="input-group">
-                        <select class="form-select" id="openai-modelName">
-                            <option value="">請先掃描模型或手動輸入</option>
-                        </select>
-                        <input type="text" class="form-control" id="openai-modelInput" placeholder="或直接輸入模型名稱">
-                        <button type="button" class="btn btn-outline-secondary" id="openai-scanModels">
-                            <i class="bi bi-search"></i> 掃描可用模型
+        <!-- Edit / Create form -->
+        <div id="profile-form-panel">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span class="fw-bold" id="form-panel-title"><i class="bi bi-pencil"></i> 編輯設定檔</span>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-sm btn-success" id="btn-activate-profile" style="display:none;">
+                            <i class="bi bi-play-circle"></i> 啟用此設定
+                        </button>
+                        <button class="btn btn-sm btn-danger" id="btn-delete-profile" style="display:none;">
+                            <i class="bi bi-trash"></i>
                         </button>
                     </div>
-                    <div class="form-text" id="openai-modelStatus"></div>
                 </div>
-                <div class="mb-3">
-                    <label class="form-label"><i class="bi bi-thermometer-half"></i> 溫度 (<span id="openai-temperature-val">0.3</span>)</label>
-                    <input type="range" class="form-range" id="openai-temperature" min="0" max="2" step="0.1">
-                </div>
-                <div class="mb-3">
-                    <label class="form-label"><i class="bi bi-chat-square-text"></i> 系統提示詞</label>
-                    <textarea class="form-control font-monospace" id="openai-systemPrompt" rows="8" required></textarea>
-                </div>
-                <button type="submit" class="btn btn-primary"><i class="bi bi-save"></i> 儲存 OpenAI 設定</button>
-            </form>
-        </div>
-    </div>
-</div>
+                <div class="card-body">
+                    <form id="profile-form">
+                        <input type="hidden" id="f-id">
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-7">
+                                <label class="form-label fw-bold">設定檔名稱</label>
+                                <input type="text" class="form-control" id="f-name" placeholder="例如：LM Studio - Mistral" required>
+                            </div>
+                            <div class="col-md-5">
+                                <label class="form-label fw-bold">Provider</label>
+                                <select class="form-select" id="f-provider">
+                                    <option value="openai">OpenAI-compatible（LM Studio / Ollama /v1 等）</option>
+                                    <option value="gemini">Google Gemini</option>
+                                    <option value="ollama">Ollama</option>
+                                </select>
+                            </div>
+                        </div>
 
-<!-- Test Section -->
-<div class="card mt-4">
-    <div class="card-header bg-success text-white"><h5 class="mb-0"><i class="bi bi-play-circle"></i> 測試當前設定</h5></div>
-    <div class="card-body">
-        <div class="mb-3">
-            <label class="form-label">輸入測試文本</label>
-            <input type="text" class="form-control" id="testText" value="a beautiful cat with blue eyes">
+                        <!-- OpenAI-specific fields -->
+                        <div id="f-openai-fields">
+                            <div class="mb-3">
+                                <label class="form-label fw-bold"><i class="bi bi-link-45deg"></i> Base URL</label>
+                                <input type="text" class="form-control" id="f-base-url" placeholder="http://192.168.1.180:1234/v1">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-bold"><i class="bi bi-key-fill"></i> API Key</label>
+                                <input type="password" class="form-control" id="f-api-key" placeholder="留空表示不更新已儲存的 Key">
+                                <div class="form-text" id="f-api-key-hint"></div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-bold"><i class="bi bi-cpu"></i> 模型</label>
+                                <div class="input-group">
+                                    <select class="form-select" id="f-model-select">
+                                        <option value="">請先掃描或手動輸入</option>
+                                    </select>
+                                    <input type="text" class="form-control" id="f-model-input" placeholder="或直接輸入模型名稱">
+                                    <button type="button" class="btn btn-outline-secondary" id="btn-scan-models">
+                                        <i class="bi bi-search"></i> 掃描
+                                    </button>
+                                </div>
+                                <div class="form-text" id="f-model-status"></div>
+                            </div>
+                        </div>
+
+                        <!-- Gemini-specific fields -->
+                        <div id="f-gemini-fields" style="display:none;">
+                            <div class="mb-3">
+                                <label class="form-label fw-bold"><i class="bi bi-key-fill"></i> API Key</label>
+                                <input type="password" class="form-control" id="f-gemini-key" placeholder="留空表示不更新已儲存的 Key">
+                                <div class="form-text" id="f-gemini-key-hint"></div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-bold"><i class="bi bi-cpu"></i> 模型名稱</label>
+                                <input type="text" class="form-control" id="f-gemini-model" placeholder="gemini-2.0-flash">
+                            </div>
+                        </div>
+
+                        <!-- Ollama-specific fields -->
+                        <div id="f-ollama-fields" style="display:none;">
+                            <div class="mb-3">
+                                <label class="form-label fw-bold"><i class="bi bi-cpu"></i> 模型名稱</label>
+                                <input type="text" class="form-control" id="f-ollama-model" placeholder="qwen3:8b">
+                            </div>
+                        </div>
+
+                        <!-- Common fields -->
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">
+                                <i class="bi bi-thermometer-half"></i> 溫度
+                                <span class="text-muted fw-normal" id="f-temp-val">0.3</span>
+                            </label>
+                            <input type="range" class="form-range" id="f-temperature" min="0" max="2" step="0.1" value="0.3">
+                        </div>
+
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary"><i class="bi bi-save"></i> 儲存</button>
+                            <button type="button" class="btn btn-secondary" id="btn-cancel-form">取消</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Shared translation system prompt -->
+            <div class="card mt-3">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span class="fw-bold"><i class="bi bi-translate"></i> 翻譯系統提示詞</span>
+                    <button class="btn btn-sm btn-primary" id="btn-save-prompt"><i class="bi bi-save"></i> 儲存</button>
+                </div>
+                <div class="card-body">
+                    <div class="form-text mb-2 text-muted">所有設定檔啟用時共用此提示詞，修改後需重新啟用設定檔才會生效。</div>
+                    <textarea class="form-control font-monospace" id="shared-system-prompt" rows="6"></textarea>
+                </div>
+            </div>
+
+            <!-- Shared optimization system prompt -->
+            <div class="card mt-3">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span class="fw-bold"><i class="bi bi-stars text-warning"></i> 優化系統提示詞</span>
+                    <button class="btn btn-sm btn-primary" id="btn-save-opt-prompt"><i class="bi bi-save"></i> 儲存</button>
+                </div>
+                <div class="card-body">
+                    <div class="form-text mb-2 text-muted">Danbooru tag 優化功能使用的提示詞，留空則使用預設提示詞。</div>
+                    <textarea class="form-control font-monospace" id="optimization-system-prompt" rows="8"></textarea>
+                </div>
+            </div>
+
+            <!-- Test section -->
+            <div class="card mt-3">
+                <div class="card-header bg-success bg-opacity-75 text-white">
+                    <i class="bi bi-play-circle"></i> 測試當前設定
+                </div>
+                <div class="card-body">
+                    <div class="input-group">
+                        <input type="text" class="form-control" id="testText" value="a beautiful cat with blue eyes">
+                        <button class="btn btn-success" id="testBtn"><i class="bi bi-play-fill"></i> 測試翻譯</button>
+                    </div>
+                    <div id="testResult" class="alert alert-info mt-2" style="display:none;"></div>
+                    <div id="testError" class="alert alert-danger mt-2" style="display:none;"></div>
+                    <div id="testLoading" class="mt-2 text-muted" style="display:none;">翻譯中...</div>
+                </div>
+            </div>
         </div>
-        <button type="button" class="btn btn-success" id="testBtn"><i class="bi bi-play-fill"></i> 測試翻譯</button>
-        <div id="testResult" class="alert alert-info mt-3" style="display:none;"></div>
-        <div id="testError" class="alert alert-danger mt-3" style="display:none;"></div>
-        <div id="testLoading" class="mt-3" style="display:none;">翻譯中...</div>
     </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-document.addEventListener('DOMContentLoaded', () => {
-    const activeProviderSelect = document.getElementById('activeProvider');
+(function () {
+    let profiles = [];
+    let selectedId = null;  // currently selected in UI
+    const DEFAULT_PROMPT = `你是一個專業的圖像提示詞翻譯助手。請將以下英文提示詞翻譯成繁體中文，保持原意並輸出純文字，不要加任何解釋。`;
 
-    const showStatus = (msg, isError = false) => {
-        const el = document.getElementById('activation-status');
+    // --- DOM ---
+    const profileList   = document.getElementById('profile-list');
+    const formPanel     = document.getElementById('profile-form-panel');
+    const placeholder   = document.getElementById('profile-placeholder');
+    const form          = document.getElementById('profile-form');
+    const btnActivate   = document.getElementById('btn-activate-profile');
+    const btnDelete     = document.getElementById('btn-delete-profile');
+    const panelTitle    = document.getElementById('form-panel-title');
+
+    // --- API ---
+    const api = (url, opts = {}) => fetch(url, {
+        headers: {'Content-Type': 'application/json'},
+        ...opts
+    });
+
+    function toast(msg, type = 'success') {
+        const el = document.createElement('div');
+        el.className = `alert alert-${type} position-fixed bottom-0 end-0 m-3`;
+        el.style.zIndex = 9999;
         el.textContent = msg;
-        el.className = isError ? 'text-danger' : 'text-success';
-    };
+        document.body.appendChild(el);
+        setTimeout(() => el.remove(), 3000);
+    }
 
-    // Load all settings
-    const loadAllSettings = async () => {
-        const settings = await fetch('/api/translation-settings').then(r => r.json());
-        activeProviderSelect.innerHTML = '';
-        settings.forEach(s => {
-            const opt = new Option(s.provider.toUpperCase(), s.provider);
-            activeProviderSelect.appendChild(opt);
-            if (s.is_active) {
-                activeProviderSelect.value = s.provider;
-                showStatus(`${s.provider.toUpperCase()} 目前為啟用中。`);
-            }
-            // Fill form fields
-            if (s.provider === 'ollama') {
-                document.getElementById('ollama-modelName').value = s.model_name || '';
-                const t = document.getElementById('ollama-temperature');
-                t.value = s.temperature;
-                document.getElementById('ollama-temperature-val').textContent = s.temperature;
-                document.getElementById('ollama-systemPrompt').value = s.system_prompt || '';
-            } else if (s.provider === 'gemini') {
-                document.getElementById('gemini-modelName').value = s.model_name || '';
-                const t = document.getElementById('gemini-temperature');
-                t.value = s.temperature;
-                document.getElementById('gemini-temperature-val').textContent = s.temperature;
-                document.getElementById('gemini-systemPrompt').value = s.system_prompt || '';
-            } else if (s.provider === 'openai') {
-                document.getElementById('openai-baseUrl').value = s.base_url || '';
-                // Populate model dropdown with current model
-                const sel = document.getElementById('openai-modelName');
-                if (s.model_name) {
-                    sel.innerHTML = `<option value="${s.model_name}">${s.model_name}</option>`;
-                    document.getElementById('openai-modelInput').value = s.model_name;
-                }
-                const t = document.getElementById('openai-temperature');
-                t.value = s.temperature;
-                document.getElementById('openai-temperature-val').textContent = s.temperature;
-                document.getElementById('openai-systemPrompt').value = s.system_prompt || '';
-            }
-        });
-    };
+    // --- Load & Render profiles ---
+    async function loadProfiles() {
+        const r = await api('/api/translation-profiles');
+        profiles = await r.json();
+        renderProfileList();
+    }
 
-    // Switch active provider
-    activeProviderSelect.addEventListener('change', async e => {
-        const provider = e.target.value;
-        showStatus(`正在切換至 ${provider.toUpperCase()}...`);
-        const r = await fetch('/api/translation-settings/activate', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({provider})
-        });
-        const res = await r.json();
-        showStatus(r.ok ? res.message : res.error, !r.ok);
-    });
+    function renderProfileList() {
+        if (profiles.length === 0) {
+            profileList.innerHTML = '<div class="text-muted text-center py-3 small">尚無設定檔，點「新增」建立</div>';
+            return;
+        }
+        profileList.innerHTML = profiles.map(p => {
+            const providerLabel = { openai: 'OpenAI-compat', gemini: 'Gemini', ollama: 'Ollama' }[p.provider] || p.provider;
+            const providerColor = { openai: 'primary', gemini: 'success', ollama: 'warning' }[p.provider] || 'secondary';
+            return `<div class="profile-card card mb-2 p-2 ${p.is_active ? 'active-profile' : ''} ${p.id === selectedId ? 'selected' : ''}"
+                        data-id="${p.id}" style="cursor:pointer;">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="fw-bold">${escHtml(p.name)}</div>
+                        <div class="text-muted small">${escHtml(p.model_name || '（未設定模型）')}</div>
+                    </div>
+                    <div class="d-flex flex-column align-items-end gap-1">
+                        <span class="badge bg-${providerColor} provider-badge">${providerLabel}</span>
+                        ${p.is_active ? '<span class="badge bg-success provider-badge"><i class="bi bi-play-fill"></i> 啟用中</span>' : ''}
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
 
-    // Temperature sliders
-    ['ollama', 'gemini', 'openai'].forEach(p => {
-        const slider = document.getElementById(`${p}-temperature`);
-        if (!slider) return;
-        slider.addEventListener('input', e => {
-            document.getElementById(`${p}-temperature-val`).textContent = e.target.value;
-        });
-    });
-
-    // Scan OpenAI models
-    document.getElementById('openai-scanModels').addEventListener('click', async () => {
-        const btn = document.getElementById('openai-scanModels');
-        const statusEl = document.getElementById('openai-modelStatus');
-        const baseUrl = document.getElementById('openai-baseUrl').value.trim();
-        const apiKey = document.getElementById('openai-apiKey').value.trim();
-        if (!baseUrl) { statusEl.textContent = '請先填入 Base URL'; return; }
-        btn.disabled = true;
-        btn.innerHTML = '<i class="bi bi-hourglass-split"></i> 掃描中...';
-        statusEl.textContent = '';
-        try {
-            const r = await fetch('/api/translation-settings/openai/probe-models', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({base_url: baseUrl, api_key: apiKey})
+        profileList.querySelectorAll('.profile-card').forEach(card => {
+            card.addEventListener('click', () => {
+                const id = parseInt(card.dataset.id);
+                openProfile(id);
             });
-            const data = await r.json();
-            if (!r.ok) throw new Error(data.error || '掃描失敗');
-            const sel = document.getElementById('openai-modelName');
-            const currentInput = document.getElementById('openai-modelInput').value;
-            sel.innerHTML = data.map(m => `<option value="${m}">${m}</option>`).join('');
-            if (currentInput && data.includes(currentInput)) sel.value = currentInput;
-            statusEl.className = 'form-text text-success';
-            statusEl.textContent = `找到 ${data.length} 個模型`;
-        } catch (e) {
-            statusEl.className = 'form-text text-danger';
-            statusEl.textContent = '掃描失敗: ' + e.message;
-        } finally {
-            btn.disabled = false;
-            btn.innerHTML = '<i class="bi bi-search"></i> 掃描可用模型';
+        });
+    }
+
+    function openProfile(id) {
+        selectedId = id;
+        const p = profiles.find(x => x.id === id);
+        if (!p) return;
+
+        panelTitle.innerHTML = '<i class="bi bi-pencil"></i> 編輯設定檔';
+        btnActivate.style.display = '';
+        btnDelete.style.display = '';
+        btnActivate.textContent = p.is_active ? '✓ 已啟用' : '啟用此設定';
+        btnActivate.className = p.is_active
+            ? 'btn btn-sm btn-outline-success disabled'
+            : 'btn btn-sm btn-success';
+
+        document.getElementById('f-id').value = id;
+        document.getElementById('f-name').value = p.name;
+        document.getElementById('f-provider').value = p.provider;
+        document.getElementById('f-temperature').value = p.temperature;
+        document.getElementById('f-temp-val').textContent = p.temperature;
+        document.getElementById('f-api-key').value = '';
+        document.getElementById('f-gemini-key').value = '';
+        document.getElementById('f-api-key-hint').textContent = p.has_api_key ? '已有儲存的 Key，留空表示不更新' : '';
+        document.getElementById('f-gemini-key-hint').textContent = p.has_api_key ? '已有儲存的 Key，留空表示不更新' : '';
+        document.getElementById('f-base-url').value = p.base_url || '';
+        document.getElementById('f-model-input').value = p.model_name || '';
+        document.getElementById('f-gemini-model').value = p.model_name || '';
+        document.getElementById('f-ollama-model').value = p.model_name || '';
+
+        const sel = document.getElementById('f-model-select');
+        if (p.model_name) {
+            sel.innerHTML = `<option value="${escHtml(p.model_name)}">${escHtml(p.model_name)}</option>`;
+        } else {
+            sel.innerHTML = '<option value="">請先掃描或手動輸入</option>';
+        }
+
+        switchProviderFields(p.provider);
+        showForm();
+        renderProfileList();
+    }
+
+    function showForm() {
+        formPanel.style.display = 'block';
+        placeholder.style.display = 'none';
+    }
+    function hideForm() {
+        formPanel.style.display = 'none';
+        placeholder.style.display = 'block';
+        selectedId = null;
+        renderProfileList();
+    }
+
+    function switchProviderFields(provider) {
+        document.getElementById('f-openai-fields').style.display = provider === 'openai' ? '' : 'none';
+        document.getElementById('f-gemini-fields').style.display = provider === 'gemini' ? '' : 'none';
+        document.getElementById('f-ollama-fields').style.display = provider === 'ollama' ? '' : 'none';
+    }
+
+    document.getElementById('f-provider').addEventListener('change', e => {
+        switchProviderFields(e.target.value);
+    });
+
+    document.getElementById('f-temperature').addEventListener('input', e => {
+        document.getElementById('f-temp-val').textContent = e.target.value;
+    });
+
+    // --- New profile ---
+    document.getElementById('btn-new-profile').addEventListener('click', () => {
+        selectedId = null;
+        panelTitle.innerHTML = '<i class="bi bi-plus-circle"></i> 新增設定檔';
+        btnActivate.style.display = 'none';
+        btnDelete.style.display = 'none';
+
+        document.getElementById('f-id').value = '';
+        document.getElementById('f-name').value = '';
+        document.getElementById('f-provider').value = 'openai';
+        document.getElementById('f-base-url').value = '';
+        document.getElementById('f-api-key').value = '';
+        document.getElementById('f-api-key-hint').textContent = '';
+        document.getElementById('f-gemini-key').value = '';
+        document.getElementById('f-gemini-key-hint').textContent = '';
+        document.getElementById('f-model-input').value = '';
+        document.getElementById('f-model-select').innerHTML = '<option value="">請先掃描或手動輸入</option>';
+        document.getElementById('f-gemini-model').value = '';
+        document.getElementById('f-ollama-model').value = '';
+        document.getElementById('f-temperature').value = 0.3;
+        document.getElementById('f-temp-val').textContent = '0.3';
+        switchProviderFields('openai');
+        showForm();
+        renderProfileList();
+    });
+
+    document.getElementById('btn-cancel-form').addEventListener('click', hideForm);
+
+    // --- Save form ---
+    form.addEventListener('submit', async e => {
+        e.preventDefault();
+        const id = document.getElementById('f-id').value;
+        const provider = document.getElementById('f-provider').value;
+
+        const body = {
+            name: document.getElementById('f-name').value.trim(),
+            provider,
+            temperature: parseFloat(document.getElementById('f-temperature').value),
+        };
+
+        if (provider === 'openai') {
+            body.base_url = document.getElementById('f-base-url').value.trim();
+            body.model_name = document.getElementById('f-model-input').value.trim()
+                           || document.getElementById('f-model-select').value;
+            const k = document.getElementById('f-api-key').value;
+            if (k) body.api_key = k;
+        } else if (provider === 'gemini') {
+            body.model_name = document.getElementById('f-gemini-model').value.trim();
+            const k = document.getElementById('f-gemini-key').value;
+            if (k) body.api_key = k;
+        } else if (provider === 'ollama') {
+            body.model_name = document.getElementById('f-ollama-model').value.trim();
+        }
+
+        const url = id ? `/api/translation-profiles/${id}` : '/api/translation-profiles';
+        const method = id ? 'PUT' : 'POST';
+        const r = await api(url, { method, body: JSON.stringify(body) });
+        if (r.ok) {
+            const saved = await r.json();
+            toast(id ? '已更新設定檔' : '已建立設定檔');
+            await loadProfiles();
+            openProfile(saved.id);
+        } else {
+            const err = await r.json();
+            toast(err.error || '儲存失敗', 'danger');
         }
     });
 
-    // Sync model input → select
-    document.getElementById('openai-modelInput').addEventListener('input', e => {
-        const sel = document.getElementById('openai-modelName');
+    // --- Activate ---
+    btnActivate.addEventListener('click', async () => {
+        if (!selectedId) return;
+        const r = await api(`/api/translation-profiles/${selectedId}/activate`, { method: 'POST' });
+        if (r.ok) {
+            const data = await r.json();
+            toast(data.message);
+            await loadProfiles();
+            openProfile(selectedId);
+        } else {
+            const err = await r.json();
+            toast(err.error || '啟用失敗', 'danger');
+        }
+    });
+
+    // --- Delete ---
+    btnDelete.addEventListener('click', async () => {
+        if (!selectedId) return;
+        const p = profiles.find(x => x.id === selectedId);
+        if (!confirm(`確定刪除「${p?.name}」？`)) return;
+        const r = await api(`/api/translation-profiles/${selectedId}`, { method: 'DELETE' });
+        if (r.ok) {
+            toast('已刪除');
+            await loadProfiles();
+            hideForm();
+        } else {
+            toast('刪除失敗', 'danger');
+        }
+    });
+
+    // --- Scan models ---
+    document.getElementById('btn-scan-models').addEventListener('click', async () => {
+        const btn = document.getElementById('btn-scan-models');
+        const statusEl = document.getElementById('f-model-status');
+        const baseUrl = document.getElementById('f-base-url').value.trim();
+        const apiKey = document.getElementById('f-api-key').value.trim();
+        if (!baseUrl) { statusEl.textContent = '請先填入 Base URL'; return; }
+        btn.disabled = true;
+        btn.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+        statusEl.textContent = '';
+        try {
+            const r = await api('/api/translation-settings/openai/probe-models', {
+                method: 'POST',
+                body: JSON.stringify({ base_url: baseUrl, api_key: apiKey })
+            });
+            const data = await r.json();
+            if (!r.ok) throw new Error(data.error || '掃描失敗');
+            const sel = document.getElementById('f-model-select');
+            const cur = document.getElementById('f-model-input').value;
+            sel.innerHTML = data.map(m => `<option value="${m}">${m}</option>`).join('');
+            if (cur && data.includes(cur)) sel.value = cur;
+            statusEl.className = 'form-text text-success';
+            statusEl.textContent = `找到 ${data.length} 個模型`;
+        } catch (err) {
+            statusEl.className = 'form-text text-danger';
+            statusEl.textContent = '掃描失敗: ' + err.message;
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-search"></i> 掃描';
+        }
+    });
+
+    document.getElementById('f-model-input').addEventListener('input', e => {
+        const sel = document.getElementById('f-model-select');
         const val = e.target.value;
-        // Add custom option if not in list
-        let found = Array.from(sel.options).find(o => o.value === val);
-        if (!found && val) {
-            const opt = new Option(val, val);
-            sel.insertBefore(opt, sel.firstChild);
+        if (val && !Array.from(sel.options).find(o => o.value === val)) {
+            sel.insertBefore(new Option(val, val), sel.firstChild);
         }
         if (val) sel.value = val;
     });
 
-    // Form save
-    const handleSave = async e => {
-        e.preventDefault();
-        const provider = e.target.dataset.provider;
-        const body = {};
-        if (provider === 'ollama') {
-            body.model_name = document.getElementById('ollama-modelName').value;
-            body.temperature = parseFloat(document.getElementById('ollama-temperature').value);
-            body.system_prompt = document.getElementById('ollama-systemPrompt').value;
-        } else if (provider === 'gemini') {
-            body.model_name = document.getElementById('gemini-modelName').value;
-            body.temperature = parseFloat(document.getElementById('gemini-temperature').value);
-            body.system_prompt = document.getElementById('gemini-systemPrompt').value;
-            const key = document.getElementById('gemini-apiKey').value;
-            if (key) body.api_key = key;
-        } else if (provider === 'openai') {
-            body.base_url = document.getElementById('openai-baseUrl').value;
-            // model: prefer text input over dropdown if filled
-            const textInput = document.getElementById('openai-modelInput').value.trim();
-            const selVal = document.getElementById('openai-modelName').value;
-            body.model_name = textInput || selVal;
-            body.temperature = parseFloat(document.getElementById('openai-temperature').value);
-            body.system_prompt = document.getElementById('openai-systemPrompt').value;
-            const key = document.getElementById('openai-apiKey').value;
-            if (key) body.api_key = key;
-        }
-        const r = await fetch(`/api/translation-settings/${provider}`, {
-            method: 'PUT',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(body)
-        });
-        if (r.ok) {
-            alert(`${provider.toUpperCase()} 設定已儲存！`);
-            if ((provider === 'gemini' || provider === 'openai') && body.api_key) {
-                document.getElementById(`${provider}-apiKey`).value = '';
-            }
-        } else {
-            const err = await r.json();
-            alert(`儲存失敗: ${err.error || '未知錯誤'}`);
-        }
-    };
-    ['ollamaSettingsForm', 'geminiSettingsForm', 'openaiSettingsForm'].forEach(id => {
-        document.getElementById(id).addEventListener('submit', handleSave);
-    });
-
-    // Test translation
+    // --- Test ---
     document.getElementById('testBtn').addEventListener('click', async () => {
         const text = document.getElementById('testText').value.trim();
-        if (!text) { alert('請輸入測試文本'); return; }
-        const activePane = document.querySelector('.tab-pane.active');
-        const provider = activePane.id.replace('-pane', '');
+        if (!text) return;
+        const p = profiles.find(x => x.id === selectedId);
+        if (!p) { toast('請先選擇設定檔', 'warning'); return; }
 
         const result = document.getElementById('testResult');
-        const error = document.getElementById('testError');
+        const error  = document.getElementById('testError');
         const loading = document.getElementById('testLoading');
         result.style.display = error.style.display = 'none';
         loading.style.display = 'block';
 
-        // Gather settings from the active tab
-        const settings = {};
-        if (provider === 'ollama') {
-            settings.model_name = document.getElementById('ollama-modelName').value;
-            settings.temperature = parseFloat(document.getElementById('ollama-temperature').value);
-            settings.system_prompt = document.getElementById('ollama-systemPrompt').value;
-        } else if (provider === 'gemini') {
-            settings.model_name = document.getElementById('gemini-modelName').value;
-            settings.temperature = parseFloat(document.getElementById('gemini-temperature').value);
-            settings.system_prompt = document.getElementById('gemini-systemPrompt').value;
-        } else if (provider === 'openai') {
-            settings.base_url = document.getElementById('openai-baseUrl').value;
-            settings.model_name = document.getElementById('openai-modelInput').value || document.getElementById('openai-modelName').value;
-            settings.temperature = parseFloat(document.getElementById('openai-temperature').value);
-            settings.system_prompt = document.getElementById('openai-systemPrompt').value;
-        }
+        const settings = {
+            model_name: document.getElementById('f-model-input').value || document.getElementById('f-model-select').value || p.model_name,
+            temperature: parseFloat(document.getElementById('f-temperature').value),
+            system_prompt: document.getElementById('shared-system-prompt').value,
+            base_url: document.getElementById('f-base-url').value || p.base_url,
+        };
+        const apiKey = document.getElementById('f-api-key').value || document.getElementById('f-gemini-key').value;
+        if (apiKey) settings.api_key = apiKey;
+        if (p.provider === 'gemini') settings.model_name = document.getElementById('f-gemini-model').value || p.model_name;
+        if (p.provider === 'ollama') settings.model_name = document.getElementById('f-ollama-model').value || p.model_name;
 
         try {
-            const r = await fetch('/api/translation-settings/test', {
+            const r = await api('/api/translation-settings/test', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({text, provider, settings})
+                body: JSON.stringify({ text, provider: p.provider, settings })
             });
             loading.style.display = 'none';
             const data = await r.json();
             if (!r.ok) throw new Error(data.error || '測試失敗');
-            result.innerHTML = `<p><strong>原文:</strong> ${data.original}</p><p><strong>譯文:</strong> <span class="fw-bold text-primary">${data.translated}</span></p>`;
+            result.innerHTML = `<p class="mb-1"><strong>原文:</strong> ${escHtml(data.original)}</p><p class="mb-0"><strong>譯文:</strong> <span class="text-primary fw-bold">${escHtml(data.translated)}</span></p>`;
             result.style.display = 'block';
-        } catch (e) {
+        } catch (err) {
             loading.style.display = 'none';
-            error.textContent = '測試失敗: ' + e.message;
+            error.textContent = '測試失敗: ' + err.message;
             error.style.display = 'block';
         }
     });
 
-    loadAllSettings();
-});
+    function escHtml(s) {
+        const d = document.createElement('div');
+        d.textContent = s || '';
+        return d.innerHTML;
+    }
+
+    // --- Shared translation system prompt ---
+    async function loadSharedPrompt() {
+        const r = await api('/api/translation-settings/system-prompt');
+        const data = await r.json();
+        document.getElementById('shared-system-prompt').value = data.system_prompt || DEFAULT_PROMPT;
+    }
+
+    document.getElementById('btn-save-prompt').addEventListener('click', async () => {
+        const prompt = document.getElementById('shared-system-prompt').value;
+        const r = await api('/api/translation-settings/system-prompt', {
+            method: 'PUT',
+            body: JSON.stringify({ system_prompt: prompt })
+        });
+        if (r.ok) toast('翻譯提示詞已儲存');
+        else toast('儲存失敗', 'danger');
+    });
+
+    // --- Shared optimization system prompt ---
+    async function loadOptimizationPrompt() {
+        const r = await api('/api/translation-settings/optimization-prompt');
+        const data = await r.json();
+        document.getElementById('optimization-system-prompt').value = data.system_prompt || '';
+    }
+
+    document.getElementById('btn-save-opt-prompt').addEventListener('click', async () => {
+        const prompt = document.getElementById('optimization-system-prompt').value;
+        const r = await api('/api/translation-settings/optimization-prompt', {
+            method: 'PUT',
+            body: JSON.stringify({ system_prompt: prompt })
+        });
+        if (r.ok) toast('優化提示詞已儲存');
+        else toast('儲存失敗', 'danger');
+    });
+
+    loadProfiles();
+    loadSharedPrompt();
+    loadOptimizationPrompt();
+})();
 </script>
 {% endblock %}

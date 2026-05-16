@@ -1,0 +1,701 @@
+{% extends "base.html" %}
+{% block title %}ComfyUI 工作流{% endblock %}
+
+{% block extra_css %}
+<style>
+.wf-sidebar   { height: 100vh; overflow-y: auto; border-right: 1px solid #dee2e6; }
+.wf-main      { height: 100vh; overflow-y: auto; }
+.wf-item      { cursor: pointer; border-left: 3px solid transparent; }
+.wf-item:hover{ background: #f8f9fa; }
+.wf-item.active { border-left-color: #d97706; background: #fef3c7; }
+.img-thumb    { object-fit: cover; height: 200px; width: 100%; cursor: zoom-in; border-radius: 4px; }
+.status-dot   { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.status-dot.on  { background: #198754; }
+.status-dot.off { background: #dc3545; }
+.status-dot.checking { background: #ffc107; }
+#json-editor  { font-size: .78rem; min-height: 280px; resize: vertical; }
+</style>
+{% endblock %}
+
+{% block fullpage %}
+<div class="row g-0" style="height: 100vh; overflow: hidden;">
+
+  <!-- ═══ LEFT SIDEBAR ════════════════════════════════════════ -->
+  <div class="col-md-3 wf-sidebar">
+
+    <!-- Toolbar -->
+    <div class="p-2 border-bottom d-flex align-items-center gap-1 sticky-top bg-white">
+      <span class="fw-semibold flex-grow-1 ps-1">工作流</span>
+      <button class="btn btn-sm btn-primary" onclick="showCreate()" title="新增">
+        <i class="bi bi-plus-lg"></i>
+      </button>
+    </div>
+
+    <!-- Connection bar -->
+    <div class="px-3 py-2 border-bottom bg-light d-flex align-items-center gap-2" style="font-size:.82rem;">
+      <span class="status-dot checking" id="dot"></span>
+      <span id="conn-text" class="flex-grow-1 text-muted">檢查連線中...</span>
+      <button class="btn btn-link btn-sm p-0 text-secondary" onclick="toggleUrlBar()" title="修改 URL">
+        <i class="bi bi-pencil-square"></i>
+      </button>
+    </div>
+    <!-- URL edit bar -->
+    <div id="url-bar" class="px-2 py-1 border-bottom" style="display:none;">
+      <div class="input-group input-group-sm">
+        <input id="url-input" type="text" class="form-control" placeholder="http://192.168.1.180:8188">
+        <button class="btn btn-success" onclick="saveUrl()">✓</button>
+        <button class="btn btn-secondary" onclick="toggleUrlBar()">✕</button>
+      </div>
+    </div>
+
+    <!-- Workflow list -->
+    <div id="wf-list"></div>
+  </div>
+
+  <!-- ═══ MAIN AREA ════════════════════════════════════════════ -->
+  <div class="col-md-9 wf-main">
+
+    <!-- ── Empty state ── -->
+    <div id="pane-empty" class="h-100 d-flex flex-column align-items-center justify-content-center text-muted">
+      <i class="bi bi-cpu" style="font-size:3.5rem;opacity:.3;"></i>
+      <div id="empty-msg" class="mt-3 mb-1 text-center">選擇或新增 ComfyUI 工作流</div>
+      <div id="pending-prompt-hint" class="mb-4 d-none">
+        <span class="badge bg-success bg-opacity-75 fs-6 px-3 py-2">
+          <i class="bi bi-check-circle me-1"></i> 提示詞已就緒，選擇工作流後自動填入
+        </span>
+      </div>
+      <button class="btn btn-primary" onclick="showCreate()">
+        <i class="bi bi-plus-lg"></i> 新增工作流
+      </button>
+    </div>
+
+    <!-- ── Create / Edit form ── -->
+    <div id="pane-form" class="p-4 d-none" style="max-width:860px;">
+      <h5 id="form-title" class="mb-4"><i class="bi bi-plus-circle text-primary"></i> 新增工作流</h5>
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold">名稱 <span class="text-danger">*</span></label>
+        <input id="f-name" type="text" class="form-control" placeholder="例如：文生圖基本流程">
+      </div>
+      <div class="mb-3">
+        <label class="form-label fw-semibold">描述</label>
+        <input id="f-desc" type="text" class="form-control" placeholder="簡短說明此工作流用途">
+      </div>
+      <div class="mb-3">
+        <div class="d-flex align-items-center gap-2 mb-1">
+          <label class="form-label fw-semibold mb-0">
+            Workflow JSON（API 格式）<span class="text-danger">*</span>
+          </label>
+          <button class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('json-file-input').click()">
+            <i class="bi bi-upload"></i> 從 .json 載入
+          </button>
+          <input id="json-file-input" type="file" accept=".json" style="display:none" onchange="loadJsonFile(this)">
+        </div>
+        <textarea id="f-json" class="form-control font-monospace"
+                  style="font-size:.78rem; min-height:280px; resize:vertical;"
+                  placeholder='{"3": {"class_type": "KSampler", "inputs": {...}}, ...}'></textarea>
+        <div id="f-json-err" class="text-danger mt-1" style="font-size:.8rem; display:none;"></div>
+      </div>
+
+      <div class="d-flex gap-2">
+        <button class="btn btn-primary" onclick="submitForm()">
+          <i class="bi bi-floppy"></i> 儲存
+        </button>
+        <button class="btn btn-secondary" onclick="cancelForm()">取消</button>
+      </div>
+    </div>
+
+    <!-- ── Workflow detail + run ── -->
+    <div id="pane-detail" class="p-4 d-none">
+
+      <!-- Header -->
+      <div class="d-flex align-items-start mb-4">
+        <div class="flex-grow-1">
+          <h4 id="d-name" class="mb-1"></h4>
+          <p id="d-desc" class="text-muted mb-0"></p>
+        </div>
+        <div class="d-flex gap-2 flex-shrink-0">
+          <button class="btn btn-sm btn-outline-secondary" onclick="editCurrent()">
+            <i class="bi bi-pencil"></i> 編輯
+          </button>
+          <button class="btn btn-sm btn-outline-danger" onclick="deleteCurrent()">
+            <i class="bi bi-trash"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Input overrides -->
+      <div class="card mb-4">
+        <div class="card-header d-flex align-items-center">
+          <i class="bi bi-sliders2 me-2 text-primary"></i>
+          <span class="fw-semibold">佔位符欄位</span>
+          <small class="text-muted ms-2">在 JSON 中使用 <code>%model%</code> <code>%prompt%</code> <code>%seed%</code> 標記可替換的欄位</small>
+        </div>
+        <div class="card-body">
+          <div id="input-fields">
+            <span class="text-muted">載入中...</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Run button -->
+      <div class="d-flex align-items-center gap-3 mb-4">
+        <button id="run-btn" class="btn btn-success btn-lg px-4" onclick="runWorkflow()">
+          <i class="bi bi-play-fill"></i> 執行
+        </button>
+        <div id="run-spinner" class="d-none">
+          <div class="spinner-border spinner-border-sm text-success me-2"></div>
+          <span class="text-muted" id="run-status-text">等待 ComfyUI 佇列...</span>
+        </div>
+      </div>
+
+      <!-- Error -->
+      <div id="err-panel" class="alert alert-danger d-none mb-4">
+        <i class="bi bi-exclamation-triangle me-2"></i>
+        <span id="err-text"></span>
+      </div>
+
+      <!-- Output images -->
+      <div id="out-panel" class="mb-4" style="display:none;">
+        <h6 class="fw-semibold mb-3"><i class="bi bi-images text-primary"></i> 輸出圖片</h6>
+        <div id="out-images" class="row g-2"></div>
+      </div>
+
+      <hr class="my-4">
+
+      <!-- Job history -->
+      <h6 class="fw-semibold mb-3"><i class="bi bi-clock-history text-secondary"></i> 最近執行記錄</h6>
+      <div id="job-history-list">
+        <span class="text-muted">載入中...</span>
+      </div>
+
+    </div><!-- /pane-detail -->
+  </div><!-- /main -->
+</div>
+
+<!-- ── Image zoom modal ── -->
+<div class="modal fade" id="imgModal" tabindex="-1">
+  <div class="modal-dialog modal-xl modal-dialog-centered">
+    <div class="modal-content bg-dark">
+      <div class="modal-header border-secondary">
+        <h6 class="modal-title text-white mb-0" id="img-modal-title"></h6>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body text-center p-2">
+        <img id="img-modal-img" src="" class="img-fluid" style="max-height:82vh;">
+      </div>
+      <div class="modal-footer border-secondary py-1">
+        <a id="img-dl-btn" href="#" download class="btn btn-outline-light btn-sm">
+          <i class="bi bi-download"></i> 下載
+        </a>
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">關閉</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock fullpage %}
+
+{% block extra_js %}
+<script>
+// ─────────────────────────────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────────────────────────────
+let workflows = [];
+let selected  = null;   // current workflow object (with workflow_json)
+let editingId = null;   // null = create mode, number = edit mode
+let pollTimer = null;
+let activeJobId = null;
+
+// ─────────────────────────────────────────────────────────────────────
+// Boot
+// ─────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+    checkConn();
+    loadWorkflows();
+    setInterval(checkConn, 30_000);
+
+    // Show hint if a prompt is pending from the prompt builder
+    if (sessionStorage.getItem('comfy_pending_prompt')) {
+        document.getElementById('pending-prompt-hint').classList.remove('d-none');
+    }
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// Connection helpers
+// ─────────────────────────────────────────────────────────────────────
+async function checkConn() {
+    const dot  = document.getElementById('dot');
+    const text = document.getElementById('conn-text');
+    dot.className = 'status-dot checking';
+    try {
+        const d = await apiFetch('/api/comfy/status');
+        dot.className  = 'status-dot ' + (d.connected ? 'on' : 'off');
+        text.textContent = d.connected ? `已連線 ${d.url}` : `未連線 ${d.url}`;
+        document.getElementById('url-input').value = d.url;
+    } catch {
+        dot.className  = 'status-dot off';
+        text.textContent = '無法連線';
+    }
+}
+
+function toggleUrlBar() {
+    const bar = document.getElementById('url-bar');
+    bar.style.display = bar.style.display === 'none' ? 'block' : 'none';
+}
+
+async function saveUrl() {
+    const url = document.getElementById('url-input').value.trim();
+    if (!url) return;
+    await apiFetch('/api/comfy/url', 'PUT', {url});
+    toggleUrlBar();
+    checkConn();
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Workflow list
+// ─────────────────────────────────────────────────────────────────────
+async function loadWorkflows() {
+    workflows = await apiFetch('/api/comfy/workflows');
+    renderList();
+}
+
+function renderList() {
+    const el = document.getElementById('wf-list');
+    if (!workflows.length) {
+        el.innerHTML = '<div class="p-3 text-muted text-center" style="font-size:.85rem;">尚無工作流</div>';
+        return;
+    }
+    el.innerHTML = workflows.map(w => `
+        <div class="wf-item px-3 py-2 border-bottom ${selected && selected.id===w.id ? 'active' : ''}"
+             onclick="selectWorkflow(${w.id})">
+            <div class="d-flex align-items-start gap-2">
+                <i class="bi bi-diagram-3 text-primary mt-1" style="font-size:.95rem;"></i>
+                <div class="overflow-hidden">
+                    <div class="fw-semibold text-truncate" style="font-size:.9rem;">${esc(w.name)}</div>
+                    ${w.description ? `<div class="text-muted text-truncate" style="font-size:.77rem;">${esc(w.description)}</div>` : ''}
+                </div>
+            </div>
+        </div>`).join('');
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Select workflow
+// ─────────────────────────────────────────────────────────────────────
+async function selectWorkflow(id) {
+    stopPoll();
+    showPane('detail');
+    selected = await apiFetch(`/api/comfy/workflows/${id}`);
+    renderList();
+    await populateDetail();
+    loadJobHistory();
+    resetRunPanel();
+}
+
+async function populateDetail() {
+    document.getElementById('d-name').textContent = selected.name;
+    document.getElementById('d-desc').textContent = selected.description || '';
+    await renderInputFields();
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Placeholder system  (%model%  %prompt%  %seed%  ...)
+// ─────────────────────────────────────────────────────────────────────
+
+// Ordered definition of known placeholders
+const PH_DEFS = [
+    { key: 'model',  label: '模型',       type: 'text',     hint: '例如：v1-5-pruned-emaonly.safetensors' },
+    { key: 'prompt', label: '正面提示詞', type: 'textarea', hint: '輸入提示詞...' },
+    { key: 'seed',   label: '種子',       type: 'number',   hint: '留空則使用工作流預設值（-1 為隨機）' },
+];
+
+function detectPlaceholders(jsonStr) {
+    // Return Set of placeholder keys found in the raw JSON string
+    const found = new Set();
+    const re = /%(\w+)%/g;
+    let m;
+    while ((m = re.exec(jsonStr)) !== null) found.add(m[1]);
+    return found;
+}
+
+async function renderInputFields() {
+    const container = document.getElementById('input-fields');
+    const found = detectPlaceholders(selected.workflow_json);
+
+    // Collect active defs in defined order, then any unknown ones
+    const active = PH_DEFS.filter(d => found.has(d.key));
+    const knownKeys = new Set(PH_DEFS.map(d => d.key));
+    for (const key of found) {
+        if (!knownKeys.has(key)) active.push({ key, label: key, type: 'text', hint: '' });
+    }
+
+    if (!active.length) {
+        container.innerHTML = `
+            <div class="text-muted" style="font-size:.85rem;">
+                工作流中未找到任何佔位符。<br>
+                請在 workflow JSON 中使用
+                <code class="bg-light px-1 rounded">%model%</code>、
+                <code class="bg-light px-1 rounded">%prompt%</code>、
+                <code class="bg-light px-1 rounded">%seed%</code>
+                標記需要替換的欄位。
+            </div>`;
+        return;
+    }
+
+    // Pre-fetch model list if %model% is present
+    let modelOptions = null;
+    if (found.has('model')) {
+        container.innerHTML = '<span class="text-muted" style="font-size:.85rem;"><i class="bi bi-hourglass-split"></i> 正在從 ComfyUI 取得模型列表...</span>';
+        try {
+            const resp = await apiFetch('/api/comfy/models');
+            if (Array.isArray(resp) && resp.length > 0) modelOptions = resp;
+        } catch { /* fall back to text input */ }
+    }
+
+    container.innerHTML = active.map(def => {
+        const labelHtml = `<label class="form-label fw-semibold mb-1">
+            <code class="text-primary bg-light px-1 rounded" style="font-size:.82rem;">%${esc(def.key)}%</code>
+            <span class="ms-1 text-dark">${esc(def.label)}</span>
+        </label>`;
+
+        let inputHtml;
+        if (def.key === 'model' && modelOptions) {
+            inputHtml = `<select class="form-select" data-ph="model">
+                <option value="">— 選擇模型 —</option>
+                ${modelOptions.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('')}
+            </select>`;
+        } else if (def.type === 'textarea') {
+            inputHtml = `<textarea class="form-control" data-ph="${esc(def.key)}" rows="3"
+                          placeholder="${esc(def.hint)}"></textarea>`;
+        } else {
+            inputHtml = `<input type="${def.type}" class="form-control" data-ph="${esc(def.key)}"
+                          placeholder="${esc(def.hint)}">`;
+        }
+
+        return `<div class="mb-3">${labelHtml}${inputHtml}</div>`;
+    }).join('');
+
+    // Auto-fill %prompt% when arriving from the prompt builder
+    const pending = sessionStorage.getItem('comfy_pending_prompt');
+    if (pending) {
+        const el = container.querySelector('[data-ph="prompt"]');
+        if (el) {
+            el.value = pending;
+            sessionStorage.removeItem('comfy_pending_prompt');
+            document.getElementById('pending-prompt-hint').classList.add('d-none');
+            // Brief highlight so the user notices
+            el.classList.add('border-success');
+            setTimeout(() => el.classList.remove('border-success'), 2000);
+        }
+    }
+}
+
+function collectPlaceholders() {
+    const result = {};
+    document.querySelectorAll('#input-fields [data-ph]').forEach(el => {
+        const key = el.dataset.ph;
+        const val = el.value.trim();
+        if (val === '') return;   // leave unfilled placeholders as-is
+        result[key] = (el.type === 'number') ? Number(val) : val;
+    });
+    return result;
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Run workflow
+// ─────────────────────────────────────────────────────────────────────
+async function runWorkflow() {
+    if (!selected) return;
+    const placeholders = collectPlaceholders();
+
+    resetRunPanel();
+    document.getElementById('run-btn').disabled = true;
+    document.getElementById('run-spinner').classList.remove('d-none');
+
+    try {
+        const d = await apiFetch(`/api/comfy/workflows/${selected.id}/run`, 'POST', {placeholders});
+        if (d.error) { showErr(d.error); return; }
+        activeJobId = d.job_id;
+        const seedTip = d.resolved_seed != null ? `  ·  種子：${d.resolved_seed}` : '';
+        document.getElementById('run-status-text').textContent = `已加入佇列 (Job ${d.job_id})${seedTip}`;
+        startPoll(d.job_id);
+    } catch(e) {
+        showErr(e.message);
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Polling
+// ─────────────────────────────────────────────────────────────────────
+function startPoll(jobId) {
+    stopPoll();
+    pollTimer = setInterval(() => pollJob(jobId), 3000);
+    pollJob(jobId);
+}
+
+function stopPoll() {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+}
+
+async function pollJob(jobId) {
+    try {
+        const j = await apiFetch(`/api/comfy/jobs/${jobId}/status`);
+        if (j.status === 'completed') {
+            stopPoll();
+            onJobDone(j);
+        } else if (j.status === 'failed') {
+            stopPoll();
+            onJobFailed(j);
+        } else {
+            document.getElementById('run-status-text').textContent =
+                j.status === 'running' ? '生成中，請稍候...' : '等待 ComfyUI 佇列...';
+        }
+    } catch { /* transient error, retry */ }
+}
+
+function onJobDone(job) {
+    document.getElementById('run-spinner').classList.add('d-none');
+    document.getElementById('run-btn').disabled = false;
+    renderImages(job.output_images || [], job.id);
+    loadJobHistory();
+}
+
+function onJobFailed(job) {
+    document.getElementById('run-spinner').classList.add('d-none');
+    document.getElementById('run-btn').disabled = false;
+    showErr(job.error_message || '執行失敗');
+    loadJobHistory();
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Output images
+// ─────────────────────────────────────────────────────────────────────
+function renderImages(images, jobId) {
+    const panel = document.getElementById('out-panel');
+    const container = document.getElementById('out-images');
+
+    if (!images.length) {
+        container.innerHTML = '<p class="text-muted col-12">未輸出任何圖片</p>';
+    } else {
+        container.innerHTML = images.map(img => {
+            const src = `/api/comfy/jobs/${jobId}/image?filename=${encodeURIComponent(img.filename)}&subfolder=${encodeURIComponent(img.subfolder)}&type=${encodeURIComponent(img.type)}`;
+            return `
+                <div class="col-sm-6 col-lg-4">
+                    <div class="card h-100 shadow-sm">
+                        <img src="${src}" class="img-thumb card-img-top"
+                             onclick="openImgModal('${src}', '${esc(img.filename)}')"
+                             onerror="this.parentElement.innerHTML='<div class=\\'card-body text-muted text-center\\'>載入失敗</div>'">
+                        <div class="card-footer py-1 px-2 d-flex align-items-center gap-1">
+                            <small class="text-muted text-truncate flex-grow-1">${esc(img.filename)}</small>
+                            <a href="${src}" download="${esc(img.filename)}" class="btn btn-link btn-sm p-0 text-secondary" title="下載">
+                                <i class="bi bi-download"></i>
+                            </a>
+                        </div>
+                    </div>
+                </div>`;
+        }).join('');
+    }
+    panel.style.display = 'block';
+}
+
+function openImgModal(src, filename) {
+    document.getElementById('img-modal-img').src = src;
+    document.getElementById('img-modal-title').textContent = filename;
+    document.getElementById('img-dl-btn').href = src;
+    document.getElementById('img-dl-btn').download = filename;
+    new bootstrap.Modal(document.getElementById('imgModal')).show();
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Job history
+// ─────────────────────────────────────────────────────────────────────
+async function loadJobHistory() {
+    if (!selected) return;
+    const jobs = await apiFetch(`/api/comfy/workflows/${selected.id}/jobs`);
+    const el = document.getElementById('job-history-list');
+
+    if (!jobs.length) {
+        el.innerHTML = '<span class="text-muted" style="font-size:.85rem;">尚無執行記錄</span>';
+        return;
+    }
+
+    const statusLabel = {
+        queued: ['secondary', '佇列中'],
+        running: ['primary', '執行中'],
+        completed: ['success', '完成'],
+        failed: ['danger', '失敗'],
+    };
+
+    el.innerHTML = `<table class="table table-sm table-hover align-middle mb-0" style="font-size:.83rem;">
+        <thead class="table-light">
+            <tr><th>時間</th><th>狀態</th><th>圖片</th><th>備註</th></tr>
+        </thead>
+        <tbody>
+        ${jobs.map(j => {
+            const [sc, sl] = statusLabel[j.status] || ['secondary', j.status];
+            const t = j.created_at ? new Date(j.created_at).toLocaleString('zh-TW') : '-';
+            const imgs = j.output_images || [];
+            return `<tr>
+                <td class="text-nowrap">${esc(t)}</td>
+                <td><span class="badge bg-${sc}">${sl}</span></td>
+                <td>
+                    ${imgs.length
+                        ? `<button class="btn btn-link btn-sm p-0" onclick='showHistJob(${j.id}, ${JSON.stringify(imgs)})'>
+                               <i class="bi bi-images"></i> ${imgs.length} 張
+                           </button>`
+                        : '<span class="text-muted">—</span>'}
+                </td>
+                <td class="text-truncate" style="max-width:160px;" title="${esc(j.error_message||'')}">
+                    ${j.error_message ? `<span class="text-danger">${esc(j.error_message.substring(0,60))}</span>` : ''}
+                </td>
+            </tr>`;
+        }).join('')}
+        </tbody>
+    </table>`;
+}
+
+function showHistJob(jobId, images) {
+    activeJobId = jobId;
+    renderImages(images, jobId);
+    document.getElementById('out-panel').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Create / Edit form
+// ─────────────────────────────────────────────────────────────────────
+function showCreate() {
+    editingId = null;
+    document.getElementById('form-title').innerHTML = '<i class="bi bi-plus-circle text-primary"></i> 新增工作流';
+    document.getElementById('f-name').value = '';
+    document.getElementById('f-desc').value = '';
+    document.getElementById('f-json').value = '';
+    hideJsonErr();
+    showPane('form');
+}
+
+function editCurrent() {
+    if (!selected) return;
+    editingId = selected.id;
+    document.getElementById('form-title').innerHTML = '<i class="bi bi-pencil text-warning"></i> 編輯工作流';
+    document.getElementById('f-name').value = selected.name;
+    document.getElementById('f-desc').value = selected.description || '';
+    try {
+        document.getElementById('f-json').value = JSON.stringify(JSON.parse(selected.workflow_json), null, 2);
+    } catch {
+        document.getElementById('f-json').value = selected.workflow_json;
+    }
+    hideJsonErr();
+    showPane('form');
+}
+
+function cancelForm() {
+    if (selected) {
+        showPane('detail');
+    } else {
+        showPane('empty');
+    }
+}
+
+function loadJsonFile(input) {
+    const file = input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+        try {
+            const parsed = JSON.parse(e.target.result);
+            document.getElementById('f-json').value = JSON.stringify(parsed, null, 2);
+            if (!document.getElementById('f-name').value.trim()) {
+                document.getElementById('f-name').value = file.name.replace(/\.json$/i, '');
+            }
+            hideJsonErr();
+        } catch(err) {
+            showJsonErr('JSON 格式錯誤：' + err.message);
+        }
+    };
+    reader.readAsText(file);
+    input.value = '';
+}
+
+async function submitForm() {
+    const name = document.getElementById('f-name').value.trim();
+    const desc = document.getElementById('f-desc').value.trim();
+    const jsonStr = document.getElementById('f-json').value.trim();
+
+    if (!name) { alert('請輸入名稱'); return; }
+    if (!jsonStr) { alert('請輸入 Workflow JSON'); return; }
+
+    try { JSON.parse(jsonStr); hideJsonErr(); }
+    catch(e) { showJsonErr('JSON 格式錯誤：' + e.message); return; }
+
+    const body = {name, description: desc, workflow_json: jsonStr};
+    let resp;
+    if (editingId) {
+        resp = await apiFetch(`/api/comfy/workflows/${editingId}`, 'PUT', body);
+    } else {
+        resp = await apiFetch('/api/comfy/workflows', 'POST', body);
+    }
+    if (resp.error) { alert(resp.error); return; }
+
+    await loadWorkflows();
+    await selectWorkflow(resp.id);
+}
+
+async function deleteCurrent() {
+    if (!selected || !confirm(`確定要刪除「${selected.name}」嗎？相關執行記錄也會一併刪除。`)) return;
+    await apiFetch(`/api/comfy/workflows/${selected.id}`, 'DELETE');
+    selected = null;
+    await loadWorkflows();
+    showPane('empty');
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// UI helpers
+// ─────────────────────────────────────────────────────────────────────
+function showPane(name) {
+    // Use d-none class (Bootstrap !important) so d-flex on pane-empty is properly overridden
+    document.getElementById('pane-empty').classList.toggle('d-none', name !== 'empty');
+    document.getElementById('pane-form').classList.toggle('d-none', name !== 'form');
+    document.getElementById('pane-detail').classList.toggle('d-none', name !== 'detail');
+}
+
+function resetRunPanel() {
+    document.getElementById('run-btn').disabled = false;
+    document.getElementById('run-spinner').classList.add('d-none');
+    document.getElementById('err-panel').classList.add('d-none');
+    document.getElementById('out-panel').style.display = 'none';
+    document.getElementById('run-status-text').textContent = '等待 ComfyUI 佇列...';
+}
+
+function showErr(msg) {
+    const p = document.getElementById('err-panel');
+    document.getElementById('err-text').textContent = msg;
+    p.classList.remove('d-none');
+    document.getElementById('run-btn').disabled = false;
+    document.getElementById('run-spinner').classList.add('d-none');
+}
+
+function showJsonErr(msg) {
+    const el = document.getElementById('f-json-err');
+    el.textContent = msg;
+    el.style.display = 'block';
+}
+function hideJsonErr() {
+    document.getElementById('f-json-err').style.display = 'none';
+}
+
+function esc(str) {
+    const d = document.createElement('div');
+    d.textContent = str ?? '';
+    return d.innerHTML;
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Fetch wrapper
+// ─────────────────────────────────────────────────────────────────────
+async function apiFetch(url, method = 'GET', body = null) {
+    const opts = {method, headers: {'Content-Type': 'application/json'}};
+    if (body) opts.body = JSON.stringify(body);
+    const r = await fetch(url, opts);
+    return r.json();
+}
+</script>
+{% endblock %}

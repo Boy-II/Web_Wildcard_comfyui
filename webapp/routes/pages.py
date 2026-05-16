@@ -8,10 +8,6 @@ pages_bp = Blueprint('pages', __name__)
 
 
 @pages_bp.route('/')
-def index():
-    return render_template('index.html')
-
-
 @pages_bp.route('/wildcards')
 def wildcards_page():
     return render_template('wildcards.html')
@@ -27,10 +23,6 @@ def export_page():
     return render_template('export.html')
 
 
-@pages_bp.route('/comfy-monitor')
-def comfy_monitor_page():
-    return render_template('comfy_monitor.html')
-
 
 @pages_bp.route('/translation-settings')
 def translation_settings_page():
@@ -42,7 +34,43 @@ def prompt_builder_page():
     return render_template('prompt_builder.html')
 
 
+@pages_bp.route('/danbooru-tools')
+def danbooru_tools_page():
+    return render_template('danbooru_tools.html')
+
+
+@pages_bp.route('/assistant')
+def assistant_page():
+    return render_template('assistant.html')
+
+
+@pages_bp.route('/comfy-workflows')
+def comfy_workflows_page():
+    return render_template('comfy_workflows.html')
+
+
 # ============= Prompt Builder API =============
+
+def _impact_wildcard_path(category_name: str) -> str:
+    """Convert category name to ImpactWildcard path format.
+
+    Rule: replace the FIRST underscore with '/' so the path maps to the
+    YAML nested structure exported by the system.
+
+    Examples:
+        clothing_dress     → clothing/dress
+        body_breast_size   → body/breast_size
+        universal          → universal  (no underscore, unchanged)
+    """
+    idx = category_name.find('_')
+    if idx == -1:
+        return category_name
+    return category_name[:idx] + '/' + category_name[idx + 1:]
+
+
+def _name_from_impact_path(wildcard_path: str) -> str:
+    """Reverse of _impact_wildcard_path: clothing/dress → clothing_dress"""
+    return wildcard_path.replace('/', '_', 1)
 
 @pages_bp.route('/api/prompt-builder/wildcards', methods=['GET'])
 def api_get_prompt_builder_wildcards():
@@ -63,7 +91,7 @@ def api_get_prompt_builder_wildcards():
                     'name': category.name,
                     'display_name': category.display_name,
                     'full_path': category.get_full_path(),
-                    'wildcard_path': category.get_wildcard_path(),
+                    'wildcard_path': _impact_wildcard_path(category.name),
                     'color': category.color,
                     'level': category.level,
                     'parent_id': category.parent_id,
@@ -97,18 +125,17 @@ def api_preview_prompt():
 
         def replace_category_wildcard(match):
             wildcard_path = match.group(1)
-            path_parts = wildcard_path.split('-')
-            category_name = path_parts[-1]
 
-            categories = Category.query.filter_by(name=category_name).all()
-            category = None
-            for cat in categories:
-                cat_wildcard_path = cat.get_wildcard_path()
-                if cat_wildcard_path == wildcard_path:
-                    category = cat
-                    break
+            # Support both formats:
+            #   __clothing/dress__  (ImpactWildcard YAML nested format)
+            #   __clothing_dress__  (flat name format)
+            #   __clothing-dress__  (legacy dash format)
+            category_name = _name_from_impact_path(wildcard_path)  # slash → underscore
+            category_name = category_name.replace('-', '_')         # dash → underscore
 
-            if not category and len(path_parts) == 1:
+            category = Category.query.filter_by(name=category_name).first()
+            if not category:
+                # Fallback: try exact match on wildcard_path as name
                 category = Category.query.filter_by(name=wildcard_path).first()
             if category:
                 wildcards = Wildcard.query.filter_by(
@@ -125,7 +152,7 @@ def api_preview_prompt():
             var_value = match.group(2)
 
             processed_value = var_value
-            processed_value = re.sub(r'__([a-zA-Z0-9_-]+)__', replace_category_wildcard, processed_value)
+            processed_value = re.sub(r'__([a-zA-Z0-9_/\-]+)__', replace_category_wildcard, processed_value)
 
             if '|' in processed_value:
                 options = processed_value.split('|')
@@ -159,7 +186,7 @@ def api_preview_prompt():
 
         for _ in range(max_iterations):
             old_result = result
-            result = re.sub(r'__([a-zA-Z0-9_-]+)__', replace_category_wildcard, result)
+            result = re.sub(r'__([a-zA-Z0-9_/\-]+)__', replace_category_wildcard, result)
             if result == old_result:
                 break
 

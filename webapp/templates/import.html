@@ -48,9 +48,9 @@
                 <!-- Step 1: File Selection -->
                 <div id="drop-zone">
                     <i class="bi bi-cloud-arrow-up" style="font-size: 3rem;"></i>
-                    <p class="mt-2">將 .txt 或 .zip 檔案拖放到此處，或點擊選擇檔案</p>
+                    <p class="mt-2">將 .txt、.yaml 或 .zip 檔案拖放到此處，或點擊選擇檔案</p>
                 </div>
-                <input type="file" id="file-input" accept=".txt,.zip" style="display: none;">
+                <input type="file" id="file-input" accept=".txt,.yaml,.yml,.zip" style="display: none;">
                 <div id="file-info" class="mt-3"></div>
 
                 <!-- Step 2: Options (hidden by default) -->
@@ -63,6 +63,12 @@
                         <input class="form-check-input" type="checkbox" value="" id="translate-checkbox">
                         <label class="form-check-label" for="translate-checkbox">
                             同時使用 Ollama 翻譯內容 (如果可用)
+                        </label>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" value="" id="lowercase-checkbox">
+                        <label class="form-check-label" for="lowercase-checkbox">
+                            全部轉為小寫
                         </label>
                     </div>
                     <div class="form-check">
@@ -109,6 +115,7 @@
                 <h6>支援格式：</h6>
                 <ul>
                     <li>TXT 文字檔（支援兩種格式）</li>
+                    <li>YAML 檔案（.yaml / .yml）</li>
                     <li>ZIP 壓縮檔（包含 TXT 檔案）</li>
                 </ul>
                 <h6 class="mt-3">文字格式說明：</h6>
@@ -120,6 +127,13 @@
                         <code class="small">shoes, boots, sneakers</code><br>
                         <small class="text-muted">底線會自動轉為空格（high_heels → high heels）</small>
                     </li>
+                </ul>
+                <h6 class="mt-3">YAML 格式說明：</h6>
+                <ul>
+                    <li>與匯出 YAML 結構相同：<br>
+                        <code class="small">clothing:<br>&nbsp;&nbsp;dress:<br>&nbsp;&nbsp;&nbsp;&nbsp;- sundress<br>&nbsp;&nbsp;&nbsp;&nbsp;- qipao</code>
+                    </li>
+                    <li>指定目標分類時，所有項目匯入該分類；<br>未指定時，依 YAML 鍵名自動對應分類</li>
                 </ul>
                 <h6 class="mt-3">匯入規則：</h6>
                 <ul>
@@ -164,7 +178,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Functions ---
     async function handleFile(file) {
         const fileInfoDiv = document.getElementById('file-info');
-        if (file && (file.name.endsWith('.txt') || file.name.endsWith('.zip'))) {
+        const validExts = ['.txt', '.zip', '.yaml', '.yml'];
+        if (file && validExts.some(ext => file.name.toLowerCase().endsWith(ext))) {
             selectedFile = file;
             fileInfoDiv.innerHTML = `
                 <p class="mb-0"><i class="bi bi-file-earmark-check"></i> <strong>步驟 1: 已選擇檔案</strong></p>
@@ -175,7 +190,7 @@ document.addEventListener('DOMContentLoaded', () => {
             validateForm();
         } else {
             selectedFile = null;
-            fileInfoDiv.innerHTML = `<span class="text-danger"><i class="bi bi-exclamation-triangle"></i> 請選擇 .txt 或 .zip 格式的檔案</span>`;
+            fileInfoDiv.innerHTML = `<span class="text-danger"><i class="bi bi-exclamation-triangle"></i> 請選擇 .txt、.yaml/.yml 或 .zip 格式的檔案</span>`;
             optionsWrapper.style.display = 'none';
             validateForm();
         }
@@ -216,6 +231,7 @@ function uploadAndImport(file) {
     const categoryId = document.getElementById('targetCategory').value;
     const translate = document.getElementById('translate-checkbox').checked;
     const commaSeparated = document.getElementById('comma-separated-checkbox').checked;
+    const toLowercase = document.getElementById('lowercase-checkbox').checked;
 
     importBtn.disabled = true;
     progressWrapper.style.display = 'block';
@@ -228,6 +244,7 @@ function uploadAndImport(file) {
     formData.append('category_id', categoryId);
     formData.append('translate', translate);
     formData.append('comma_separated', commaSeparated);
+    formData.append('to_lowercase', toLowercase);
 
 
     const xhr = new XMLHttpRequest();

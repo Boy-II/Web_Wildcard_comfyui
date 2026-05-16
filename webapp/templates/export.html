@@ -37,19 +37,13 @@
                         <div class="form-check">
                             <input class="form-check-input" type="radio" name="format" id="format-txt" value="txt" checked>
                             <label class="form-check-label" for="format-txt">
-                                TXT 文字檔
+                                <strong>TXT</strong> — 每行一筆，直接用於 ComfyUI wildcard 資料夾
                             </label>
                         </div>
                         <div class="form-check">
-                            <input class="form-check-input" type="radio" name="format" id="format-json" value="json">
-                            <label class="form-check-label" for="format-json">
-                                JSON 格式
-                            </label>
-                        </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="radio" name="format" id="format-csv" value="csv">
-                            <label class="form-check-label" for="format-csv">
-                                CSV 試算表
+                            <input class="form-check-input" type="radio" name="format" id="format-yaml" value="yaml">
+                            <label class="form-check-label" for="format-yaml">
+                                <strong>YAML</strong> — 巢狀結構，支援 <code>__category/sub__</code> 語法（ImpactWildcard 格式）
                             </label>
                         </div>
                     </div>
@@ -70,10 +64,18 @@
                 </h5>
             </div>
             <div class="card-body">
-                <p>選擇您要匯出的類別和格式，系統將產生對應的檔案供您下載。</p>
-                <p class="small text-muted">
-                    <strong>提示：</strong> 匯出時只會包含啟用狀態的 wildcard。
-                </p>
+                <p>選擇類別和格式後下載，只匯出<strong>啟用中</strong>的 wildcard。</p>
+                <hr>
+                <p class="small mb-1"><strong>TXT 格式</strong></p>
+                <p class="small text-muted mb-2">每行一筆，放入 ComfyUI <code>wildcards/</code> 資料夾，用 <code>__檔名__</code> 引用。</p>
+                <p class="small mb-1"><strong>YAML 格式（ImpactWildcard）</strong></p>
+                <p class="small text-muted mb-0">自動依分類名稱建立巢狀結構：</p>
+                <pre class="small bg-light p-2 rounded mt-1">clothing:
+  dress:
+    - item1
+  accessories:
+    - item2</pre>
+                <p class="small text-muted">對應語法：<code>__clothing/dress__</code></p>
             </div>
         </div>
     </div>
