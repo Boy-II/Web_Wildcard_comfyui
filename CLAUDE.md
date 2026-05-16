@@ -87,7 +87,7 @@ Business logic is extracted into services; routes delegate to them:
 - `wildcard_service.py` — wildcard CRUD helpers
 - `translation_service.py` — dispatches `translate()` / `batch_translate()` to the active provider helper
 - `danbooru_service.py` — Danbooru API calls + local DB cache, thread-safe download lock
-- `assistant_service.py` — AI assistant with structured `<action>` tags parsed server-side
+- `assistant_service.py` — AI assistant with structured `<action>` tags parsed server-side. `chat()` tries `_get_wildcards_by_category()` (bulk fetch ≤100 from matched category + pagination) before falling back to `_search_wildcards()` (keyword, limit 25). Supported action types: `update_category`, `add_wildcard`, `move_wildcard`, `delete_wildcard`.
 - `comfy_api_service.py` — ComfyUI REST API client (`check_connection`, `queue_prompt`, `get_history`, `get_image_bytes`). Base URL defaults to `http://192.168.1.180:8188`, overridable via `AppSetting.comfyui_api_url`.
 - `optimization_service.py` — batch/performance utilities
 
@@ -130,7 +130,22 @@ The sync logic lives in `webapp/routes/api/comfy_sync.py` and `category_service.
 ### Danbooru integration
 - `GET /api/danbooru/browse` — proxies `danbooru.donmai.us/posts.json` (auth from AppSetting `danbooru_login` / `danbooru_api_key`)
 - `POST /api/danbooru/translate-tags` — batch lookup Chinese translations from local Wildcard table; normalises Danbooru underscores to spaces (`long_hair` → `long hair`) for matching
-- Prompt builder Danbooru tab: click image → tag chips appear; click chip = insert into prompt; hover `+` = add tag to Wildcard DB (defaults to category named `other`, `未分類`, or `未整理`)
+- Prompt builder Danbooru tab: click image → tag chips appear; click chip = insert into prompt; hover `+` = add tag to Wildcard DB (defaults to category named `other`, `未分類`, or `未整理`). `+` uses `_addToDbTag` module variable to avoid onclick quoting conflicts.
+- Rating filters: G/S/Q/E toggles; single active rating = `rating:g`, multiple = OR syntax `~rating:g ~rating:s`
+- Category filters: 角色/畫師/版權/一般 toggleable; maps to Danbooru `tag_type` parameter
+
+### Settings page
+The settings page (`/settings`) has two sections:
+1. **API 設定** (top): two cards — 翻譯功能 (activates a profile via `POST /api/translation-profiles/<id>/activate`) and AI助手 (saves profile id via `PUT /api/assistant/settings`)
+2. **設定檔管理** (below): CRUD for `TranslationProfile` records shared between both features
+
+### Prompt builder tabs
+Three tabs in the left panel:
+- **Wildcard**: hierarchical `__category/subcategory__` insertion
+- **Danbooru**: image search + tag extraction with rating/category filters
+- **Tag DB**: lazy-loaded hierarchical tree of all categories + their wildcards (parent collapsed → children collapsed → chips)
+
+All three use `insertIntoPrompt(text)` which auto-appends a comma if the textarea doesn't end with one.
 
 ### ComfyUI wildcard sync (two approaches)
 - **Local**: flat `.txt` files in `COMFYUI_WILDCARD_PATH`; category hierarchy encoded with `__` separator
