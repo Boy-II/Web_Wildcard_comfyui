@@ -576,7 +576,7 @@
                         <ul class="dropdown-menu dropdown-menu-end">
                             <li><a class="dropdown-item" href="#" data-action="edit-content" data-id="${w.id}" data-content="${escAttr(w.content)}" data-zh="${escAttr(w.content_zh || '')}"><i class="bi bi-pencil"></i> 編輯</a></li>
                             <li><a class="dropdown-item" href="#" data-action="translate" data-id="${w.id}"><i class="bi bi-translate"></i> 翻譯</a></li>
-                            <li><a class="dropdown-item" href="#" data-action="optimize" data-id="${w.id}"><i class="bi bi-stars text-warning"></i> 優化</a></li>
+                            <li><a class="dropdown-item" href="#" data-action="migrate-single" data-id="${w.id}"><i class="bi bi-arrow-right-circle text-info"></i> 遷移分類</a></li>
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item text-danger" href="#" data-action="delete" data-id="${w.id}"><i class="bi bi-trash"></i> 刪除</a></li>
                         </ul>
@@ -608,7 +608,7 @@
                 const id = parseInt(el.dataset.id);
                 if (action === 'edit-content') openEditModal(id, el.dataset.content, el.dataset.zh);
                 else if (action === 'translate') await translateOne(id);
-                else if (action === 'optimize') await optimizeOne(id);
+                else if (action === 'migrate-single') migrateOne(id);
                 else if (action === 'delete') await deleteOne(id);
             });
         });
@@ -722,26 +722,6 @@
         } else { const e = await r.json(); toast(e.error || '翻譯失敗', 'danger'); }
     }
 
-    // Single optimize
-    async function optimizeOne(id) {
-        toast('優化中...', 'info');
-        const r = await api(`/api/wildcards/${id}/optimize`, {method: 'POST'});
-        if (r.ok) {
-            const data = await r.json();
-            const row = wcTbody.querySelector(`tr[data-id="${id}"]`);
-            if (row) {
-                if (data.content)    row.querySelector('.content-cell:nth-child(2)').textContent = data.content;
-                if (data.content_zh !== undefined) row.querySelector('.content-cell:nth-child(3)').textContent = data.content_zh || '';
-                const editLink = row.querySelector('[data-action="edit-content"]');
-                if (editLink) {
-                    if (data.content)    editLink.dataset.content = data.content;
-                    if (data.content_zh !== undefined) editLink.dataset.zh = data.content_zh || '';
-                }
-            } else { loadWildcards(); }
-            toast('優化完成');
-        } else { const e = await r.json(); toast(e.error || '優化失敗', 'danger'); }
-    }
-
     // Delete single
     async function deleteOne(id) {
         if (!confirm('確定刪除此 Wildcard？')) return;
@@ -773,17 +753,24 @@
     // --- Migrate modal ---
     const migrateModal = new bootstrap.Modal(document.getElementById('migrateModal'));
     let migrateTargetId = null;
+    let _migrateIds = [];
 
-    document.getElementById('bulk-migrate').addEventListener('click', e => {
-        e.preventDefault();
-        const ids = getSelectedIds();
-        if (ids.length === 0) { toast('請先選擇 Wildcard', 'warning'); return; }
+    function openMigrateModal(ids) {
+        if (!ids.length) { toast('請先選擇 Wildcard', 'warning'); return; }
+        _migrateIds = ids;
         document.getElementById('migrate-count').textContent = ids.length;
         migrateTargetId = null;
         document.getElementById('btn-do-migrate').disabled = true;
         document.getElementById('migrate-cat-search').value = '';
         renderMigrateCatList('');
         migrateModal.show();
+    }
+
+    function migrateOne(id) { openMigrateModal([id]); }
+
+    document.getElementById('bulk-migrate').addEventListener('click', e => {
+        e.preventDefault();
+        openMigrateModal(getSelectedIds());
     });
 
     function renderMigrateCatList(q) {
@@ -852,7 +839,7 @@
     });
 
     document.getElementById('btn-do-migrate').addEventListener('click', async () => {
-        const ids = getSelectedIds();
+        const ids = _migrateIds;
         if (!ids.length || !migrateTargetId) return;
         const btn = document.getElementById('btn-do-migrate');
         btn.disabled = true;

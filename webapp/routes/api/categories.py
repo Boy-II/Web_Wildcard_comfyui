@@ -18,15 +18,27 @@ def api_get_categories():
     tree_mode = request.args.get('tree', 'false').lower() == 'true'
     parent_id = request.args.get('parent_id', type=int)
 
+    def _by_name(c):
+        return (c.display_name or c.name or '')
+
     if parent_id is not None:
-        categories = Category.query.filter_by(parent_id=parent_id).order_by(Category.sort_order).all()
+        categories = sorted(
+            Category.query.filter_by(parent_id=parent_id).all(),
+            key=_by_name
+        )
         return jsonify([cat.to_dict() for cat in categories])
 
     if tree_mode:
-        root_categories = Category.query.filter_by(parent_id=None).order_by(Category.sort_order).all()
+        root_categories = sorted(
+            Category.query.filter_by(parent_id=None).all(),
+            key=_by_name
+        )
         return jsonify([cat.to_dict(include_children=True) for cat in root_categories])
 
-    categories = Category.query.order_by(Category.level, Category.sort_order).all()
+    categories = sorted(
+        Category.query.order_by(Category.level).all(),
+        key=lambda c: (c.level, _by_name(c))
+    )
     return jsonify([cat.to_dict() for cat in categories])
 
 

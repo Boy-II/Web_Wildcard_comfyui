@@ -199,6 +199,7 @@
     let history = [];
     let sending = false;
     let pendingImage = null; // base64 data URL
+    let _batchState = null; // {category_id, category_name, total, next_offset} for pagination
 
     // ── Image upload ─────────────────────────────────────────────
     document.getElementById('btn-image').addEventListener('click', () => fileInput.click());
@@ -246,6 +247,7 @@
     // ── Clear ────────────────────────────────────────────────────
     document.getElementById('btn-clear').addEventListener('click', () => {
         history = [];
+        _batchState = null;
         clearImage();
         messagesEl.innerHTML = `
             <div class="msg-wrap bot">
@@ -271,8 +273,8 @@
     });
 
     // ── Send ─────────────────────────────────────────────────────
-    async function sendMessage() {
-        const msg = inputEl.value.trim();
+    async function sendMessage(overrideMsg, overrideOffset) {
+        const msg = overrideMsg !== undefined ? overrideMsg : inputEl.value.trim();
         if ((!msg && !pendingImage) || sending) return;
 
         sending = true;
@@ -282,11 +284,16 @@
         sendBtn.disabled = true;
         clearImage();
 
-        appendMessage('user', msg || '（圖片）', [], imageToSend);
+        const displayMsg = overrideMsg || msg || '（圖片）';
+        appendMessage('user', displayMsg, [], imageToSend);
         const typingEl = appendTyping();
 
+        // Determine offset: use override, or batch state continuation, or 0
+        const offset = overrideOffset !== undefined ? overrideOffset :
+                       (_batchState && (msg.includes('繼續') || msg.includes('下一批')) ? _batchState.next_offset : 0);
+
         try {
-            const body = {message: msg || '請描述這張圖片', history};
+            const body = {message: msg || '請描述這張圖片', history, offset};
             if (imageToSend) body.image = imageToSend;
 
             const r = await fetch('/api/assistant/chat', {
@@ -300,10 +307,21 @@
             if (d.error) {
                 appendMessage('bot', '⚠️ ' + d.error);
             } else {
-                appendMessage('bot', d.reply, d.wildcards || []);
+                appendMessage('bot', d.reply, d.wildcards || [], null, d.actions || [], d.category_batch);
                 history.push({role: 'user', content: msg || '請描述這張圖片'});
                 history.push({role: 'assistant', content: d.reply});
                 if (history.length > 20) history = history.slice(-20);
+
+                // Update batch state for pagination
+                if (d.category_batch && d.category_batch.remaining > 0) {
+                    _batchState = {
+                        category_id: d.category_batch.category_id,
+                        category_name: d.category_batch.category_name,
+                        next_offset: d.category_batch.offset + 100,
+                    };
+                } else {
+                    _batchState = null;
+                }
             }
         } catch (e) {
             typingEl.remove();
@@ -316,7 +334,7 @@
     }
 
     // ── Render helpers ───────────────────────────────────────────
-    function appendMessage(role, text, wildcards = [], image = null) {
+    function appendMessage(role, text, wildcards = [], image = null, actions = [], categoryBatch = null) {
         const isUser = role === 'user';
         const wrap = document.createElement('div');
         wrap.className = `msg-wrap ${isUser ? 'user' : 'bot'}`;
@@ -347,6 +365,14 @@
         }
         inner.appendChild(bubble);
 
+        // Action execution log
+        if (actions && actions.length) {
+            const logDiv = document.createElement('div');
+            logDiv.style.cssText = 'margin-top:.35rem;font-size:.78rem;color:#495057;';
+            logDiv.innerHTML = actions.map(a => `<div>${escHtml(a)}</div>`).join('');
+            inner.appendChild(logDiv);
+        }
+
         // Wildcard result chips
         if (wildcards.length) {
             const chips = document.createElement('div');
@@ -365,6 +391,20 @@
                 chips.appendChild(chip);
             });
             inner.appendChild(chips);
+        }
+
+        // Batch pagination button
+        if (categoryBatch && categoryBatch.remaining > 0) {
+            const nextOffset = categoryBatch.offset + 100;
+            const btn = document.createElement('button');
+            btn.className = 'btn btn-sm btn-outline-primary mt-2';
+            btn.style.fontSize = '.78rem';
+            btn.innerHTML = `<i class="bi bi-arrow-right-circle"></i> 繼續下一批（尚有 ${categoryBatch.remaining} 筆）`;
+            btn.addEventListener('click', () => {
+                btn.disabled = true;
+                sendMessage(`繼續下一批${categoryBatch.category_name}`, nextOffset);
+            });
+            inner.appendChild(btn);
         }
 
         if (isUser) {

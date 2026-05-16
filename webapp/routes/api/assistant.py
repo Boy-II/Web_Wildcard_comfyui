@@ -46,8 +46,10 @@ def api_chat():
     if image and not image.startswith('data:image/'):
         image = None
 
+    offset = int(data.get('offset') or 0)
+
     try:
-        result = assistant_service.chat(message, clean_history, image=image)
+        result = assistant_service.chat(message, clean_history, image=image, offset=offset)
         return jsonify(result)
     except Exception as e:
         return jsonify({'error': str(e)}), 500

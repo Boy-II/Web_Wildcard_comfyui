@@ -140,6 +140,42 @@
 .wildcard-items { max-height: 0; overflow: hidden; transition: max-height .25s ease; }
 .wildcard-items.show { max-height: 800px; }
 
+/* ── Tag DB tab ─────────────────────────────────────────────── */
+.tdb-search-area {
+    padding: .5rem .6rem;
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+#tdb-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: .4rem .5rem;
+}
+#tdb-list::-webkit-scrollbar { width: 3px; }
+#tdb-list::-webkit-scrollbar-thumb { background: var(--border-color); }
+.tdb-tag-chip {
+    display: inline-block;
+    padding: .1rem .38rem;
+    border-radius: 4px;
+    font-size: .7rem;
+    margin: 2px;
+    cursor: pointer;
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    background: var(--content-bg);
+    transition: all .12s;
+    vertical-align: top;
+    line-height: 1.4;
+}
+.tdb-tag-chip:hover { border-color: var(--accent); color: var(--accent); }
+.tdb-tag-zh {
+    display: block;
+    font-size: .6rem;
+    opacity: .72;
+    line-height: 1.2;
+    margin-top: .05rem;
+}
+
 /* ── Danbooru tab ───────────────────────────────────────────── */
 .dan-search-area {
     padding: .5rem .6rem;
@@ -218,9 +254,30 @@
     padding: .4rem .5rem;
     margin: 0 .2rem .3rem;
 }
-.tag-chip.tg { border-color: #3b82f680; color: #3b82f6; }
-.tag-chip.tc { border-color: #10b98180; color: #10b981; }
-.tag-chip.ta { border-color: #f59e0b80; color: #f59e0b; }
+.tag-chip.tg  { border-color: #3b82f680; color: #3b82f6; }
+.tag-chip.tc  { border-color: #10b98180; color: #10b981; }
+.tag-chip.ta  { border-color: #f59e0b80; color: #f59e0b; }
+.tag-chip.tco { border-color: #a855f780; color: #a855f7; }
+
+/* Rating filter buttons */
+.dan-rating-btn { font-size: .7rem; padding: .05rem .38rem; font-weight: 600; }
+.dan-rating-btn[data-rating="g"].active { background:#198754; border-color:#198754; color:#fff; }
+.dan-rating-btn[data-rating="s"].active { background:#ffc107; border-color:#ffc107; color:#000; }
+.dan-rating-btn[data-rating="q"].active { background:#fd7e14; border-color:#fd7e14; color:#fff; }
+.dan-rating-btn[data-rating="e"].active { background:#dc3545; border-color:#dc3545; color:#fff; }
+
+/* Tag category group toggle */
+.dan-cat-btn {
+    font-size: .65rem; padding: .05rem .35rem;
+    border: 1px solid var(--border-color); border-radius: 3px;
+    background: var(--content-bg); color: var(--text-secondary);
+    cursor: pointer; font-family: inherit; transition: all .12s;
+}
+.dan-cat-btn.tc.active  { background:#10b981; border-color:#10b981; color:#fff; }
+.dan-cat-btn.ta.active  { background:#f59e0b; border-color:#f59e0b; color:#000; }
+.dan-cat-btn.tco.active { background:#a855f7; border-color:#a855f7; color:#fff; }
+.dan-cat-btn.tg.active  { background:#3b82f6; border-color:#3b82f6; color:#fff; }
+.dan-tag-group { margin-bottom: .15rem; }
 .tag-zh {
     display: block;
     font-size: .62rem;
@@ -305,6 +362,9 @@
       <button class="pb-tab-btn active" id="tab-btn-wc" onclick="switchPbTab('wc')">
         <i class="bi bi-collection"></i> Wildcard
       </button>
+      <button class="pb-tab-btn" id="tab-btn-tdb" onclick="switchPbTab('tdb')">
+        <i class="bi bi-tags"></i> Tag DB
+      </button>
       <button class="pb-tab-btn" id="tab-btn-dan" onclick="switchPbTab('dan')">
         <i class="bi bi-images"></i> Danbooru
       </button>
@@ -328,6 +388,23 @@
       <div id="categoryList"><p class="text-muted text-center mt-3" style="font-size:.83rem;">載入中...</p></div>
     </div>
 
+    <!-- Tag DB tab -->
+    <div id="pane-tdb" class="pb-tab-pane d-none">
+      <div class="tdb-search-area">
+        <div class="input-group input-group-sm">
+          <input id="tdb-search" type="text" class="form-control"
+                 placeholder="搜尋分類或標籤（中/英）..."
+                 oninput="filterTagDb()">
+          <button class="btn btn-outline-secondary" onclick="document.getElementById('tdb-search').value=''; filterTagDb();">
+            <i class="bi bi-x"></i>
+          </button>
+        </div>
+      </div>
+      <div id="tdb-list">
+        <p class="text-muted text-center mt-3" style="font-size:.83rem;">載入中...</p>
+      </div>
+    </div>
+
     <!-- Danbooru tab -->
     <div id="pane-dan" class="pb-tab-pane d-none">
       <div class="dan-search-area">
@@ -338,13 +415,18 @@
             <i class="bi bi-search"></i>
           </button>
         </div>
-        <div class="d-flex gap-1 mt-1">
-          <button class="btn btn-outline-secondary py-0 px-2" style="font-size:.7rem;"
-                  onclick="danQuickSearch('order:rank')">
+        <!-- Rating filters -->
+        <div class="d-flex align-items-center gap-1 mt-1 flex-wrap">
+          <span style="font-size:.65rem; color:var(--text-secondary); flex-shrink:0;">分級：</span>
+          <button class="btn btn-outline-secondary dan-rating-btn active" data-rating="g" onclick="toggleDanRating(this)">G</button>
+          <button class="btn btn-outline-secondary dan-rating-btn active" data-rating="s" onclick="toggleDanRating(this)">S</button>
+          <button class="btn btn-outline-secondary dan-rating-btn" data-rating="q" onclick="toggleDanRating(this)">Q</button>
+          <button class="btn btn-outline-secondary dan-rating-btn" data-rating="e" onclick="toggleDanRating(this)">E</button>
+          <div class="vr" style="height:1.1rem; align-self:center;"></div>
+          <button class="btn btn-outline-secondary py-0 px-2" style="font-size:.7rem;" onclick="danQuickSearch('order:rank')">
             <i class="bi bi-trophy"></i> 排行榜
           </button>
-          <button class="btn btn-outline-secondary py-0 px-2" style="font-size:.7rem;"
-                  onclick="danQuickSearch('')">
+          <button class="btn btn-outline-secondary py-0 px-2" style="font-size:.7rem;" onclick="danQuickSearch('')">
             <i class="bi bi-clock-history"></i> 最新
           </button>
         </div>
@@ -361,9 +443,13 @@
       </div>
       <div id="dan-add-panel" class="d-none"></div>
       <div id="dan-tag-panel" class="dan-tag-panel d-none">
-        <div class="d-flex align-items-center mb-1 gap-2">
-          <small class="fw-semibold flex-grow-1" style="font-size:.75rem;">提取的 Tags</small>
-          <button class="btn btn-sm btn-primary py-0 px-2" style="font-size:.72rem;" onclick="addAllDanTags()">
+        <div class="d-flex align-items-center mb-1 gap-1 flex-wrap">
+          <small class="fw-semibold me-1" style="font-size:.72rem; flex-shrink:0;">Tags：</small>
+          <button class="dan-cat-btn tc active" data-cat="tc" onclick="toggleDanCat(this)">角色</button>
+          <button class="dan-cat-btn ta active" data-cat="ta" onclick="toggleDanCat(this)">畫師</button>
+          <button class="dan-cat-btn tco active" data-cat="tco" onclick="toggleDanCat(this)">版權</button>
+          <button class="dan-cat-btn tg active" data-cat="tg" onclick="toggleDanCat(this)">一般</button>
+          <button class="btn btn-sm btn-primary py-0 px-2 ms-auto" style="font-size:.72rem;" onclick="addAllDanTags()">
             <i class="bi bi-plus-lg"></i> 全部加入
           </button>
         </div>
@@ -599,9 +685,11 @@ let currentGroup  = 'all';
 let helpModal, saveModal, loadModal;
 
 // Danbooru state
-let danPage        = 1;
-let danCurrentTags = '';
+let danPage         = 1;
+let danCurrentTags  = '';
 let danSelectedPost = null;
+let _danRatings     = new Set(['g', 's']); // default G + S
+let _danCatVisible  = { tc: true, ta: true, tco: true, tg: true };
 
 // Builder ComfyUI state
 let builderPollTimer = null;
@@ -651,13 +739,18 @@ function initResizeHandle() {
 }
 
 // ─── Tab switching ────────────────────────────────────────────
+let _tdbRendered = false;
+
 function switchPbTab(tab) {
-    const isWc = tab === 'wc';
-    document.getElementById('pane-wc').classList.toggle('d-none', !isWc);
-    document.getElementById('pane-dan').classList.toggle('d-none', isWc);
-    document.getElementById('tab-btn-wc').classList.toggle('active', isWc);
-    document.getElementById('tab-btn-dan').classList.toggle('active', !isWc);
-    document.querySelector('.pb-wrap').classList.toggle('dan-mode', !isWc);
+    ['wc', 'tdb', 'dan'].forEach(t => {
+        document.getElementById(`pane-${t}`).classList.toggle('d-none', t !== tab);
+        document.getElementById(`tab-btn-${t}`).classList.toggle('active', t === tab);
+    });
+    document.querySelector('.pb-wrap').classList.toggle('dan-mode', tab === 'dan');
+    if (tab === 'tdb' && !_tdbRendered && allCategories.length) {
+        renderTagDb();
+        _tdbRendered = true;
+    }
 }
 
 // ─── Syntax help toggle ───────────────────────────────────────
@@ -675,6 +768,11 @@ async function loadWildcards() {
         const r = await fetch('/api/prompt-builder/wildcards');
         allCategories = await r.json();
         renderCategories(allCategories);
+        // If Tag DB tab was opened before data arrived, render now
+        if (!_tdbRendered && !document.getElementById('pane-tdb').classList.contains('d-none')) {
+            renderTagDb();
+            _tdbRendered = true;
+        }
     } catch {
         document.getElementById('categoryList').innerHTML =
             '<p class="text-danger text-center" style="font-size:.82rem;">載入失敗</p>';
@@ -789,9 +887,24 @@ function filterCategories() {
     });
 }
 
+// ─── Shared prompt insertion ──────────────────────────────────
+function insertIntoPrompt(text) {
+    const ta = document.getElementById('promptTextarea');
+    const trimmed = ta.value.trimEnd();
+    if (!trimmed) {
+        ta.value = text;
+    } else if (trimmed.endsWith(',')) {
+        ta.value = trimmed + text;
+    } else {
+        ta.value = trimmed + ',' + text;
+    }
+    ta.focus();
+    updateStats();
+}
+
 // ─── Wildcard insertion ───────────────────────────────────────
 function insertWildcardSyntax(wildcardPath) {
-    insertSyntax('__' + wildcardPath + '__', '');
+    insertIntoPrompt('__' + wildcardPath + '__');
 }
 
 function insertSyntax(before, after) {
@@ -961,10 +1074,143 @@ async function deleteTemplate(id, event) {
     } catch { alert('刪除失敗'); }
 }
 
+// ─── Tag DB tab ───────────────────────────────────────────────
+function renderTagDb() {
+    const container = document.getElementById('tdb-list');
+    if (!allCategories.length) {
+        container.innerHTML = '<p class="text-muted text-center mt-3" style="font-size:.82rem;">沒有分類資料</p>';
+        return;
+    }
+    container.innerHTML = '';
+    const { groups, roots } = buildGroups(allCategories);
+
+    // Parent groups → children (collapsed by default)
+    for (const [groupKey, children] of groups) {
+        const total = children.reduce((s, {cat}) => s + (cat.wildcard_count || 0), 0);
+
+        const groupDiv = document.createElement('div');
+        groupDiv.className = 'cat-group-wrapper';
+
+        const header = document.createElement('div');
+        header.className = 'category-header group-top-header';
+        header.innerHTML = `<span><i class="bi bi-folder me-1 text-warning" style="font-size:.8rem;"></i><strong style="font-size:.78rem;">${escapeHtml(groupKey)}</strong><span class="category-badge">${total}</span></span><i class="bi bi-chevron-right" style="font-size:.7rem;"></i>`;
+
+        const body = document.createElement('div');
+        body.className = 'wildcard-items ps-1';
+        header.onclick = () => toggleSection(header, body);
+
+        for (const { cat, label } of children) {
+            body.appendChild(_makeTdbCatBlock(cat, label));
+        }
+        groupDiv.appendChild(header);
+        groupDiv.appendChild(body);
+        container.appendChild(groupDiv);
+    }
+
+    // Root categories (no parent group) — show directly
+    for (const { cat, label } of roots) {
+        container.appendChild(_makeTdbCatBlock(cat, label));
+    }
+}
+
+function _makeTdbCatBlock(cat, label) {
+    const wrap = document.createElement('div');
+    wrap.className = 'cat-group-wrapper';
+
+    const header = document.createElement('div');
+    header.className = 'category-header';
+    header.style.borderLeft = `3px solid ${cat.color || '#6c757d'}`;
+    header.innerHTML = `<span style="font-size:.78rem;">${escapeHtml(label)}<span class="category-badge">${cat.wildcard_count}</span></span><i class="bi bi-chevron-right" style="font-size:.7rem;"></i>`;
+
+    const body = document.createElement('div');
+    body.className = 'wildcard-items ps-1';
+
+    header.onclick = () => {
+        if (!body.dataset.loaded) {
+            body.innerHTML = _tdbChipsHtml(cat.wildcards || []);
+            body.dataset.loaded = '1';
+        }
+        toggleSection(header, body);
+    };
+
+    wrap.appendChild(header);
+    wrap.appendChild(body);
+    return wrap;
+}
+
+function _tdbChipsHtml(wildcards) {
+    return wildcards.map(w =>
+        `<span class="tdb-tag-chip" data-tag="${escapeHtml(w.content)}" onclick="insertTagText(this.dataset.tag)">${escapeHtml(w.content)}${w.content_zh ? `<span class="tdb-tag-zh">${escapeHtml(w.content_zh)}</span>` : ''}</span>`
+    ).join('');
+}
+
+function insertTagText(content) {
+    insertIntoPrompt(content);
+}
+
+function filterTagDb() {
+    const q = document.getElementById('tdb-search').value.toLowerCase().trim();
+    if (!q) { renderTagDb(); _tdbRendered = true; return; }
+
+    const container = document.getElementById('tdb-list');
+    container.innerHTML = '';
+    let found = 0;
+
+    for (const cat of allCategories) {
+        const labelFull = (cat.display_name || cat.name || '').toLowerCase();
+        const nameMatch = labelFull.includes(q);
+        const matchingTags = (cat.wildcards || []).filter(w =>
+            w.content.toLowerCase().includes(q) || (w.content_zh || '').includes(q)
+        );
+        if (!nameMatch && !matchingTags.length) continue;
+
+        const tagsToShow = nameMatch ? (cat.wildcards || []) : matchingTags;
+        const displayLabel = cat.display_name || cat.name;
+
+        const div = document.createElement('div');
+        div.className = 'cat-group-wrapper';
+        div.innerHTML = `
+            <div class="category-header active" style="border-left:3px solid ${cat.color||'#6c757d'};">
+                <span style="font-size:.78rem;">${escapeHtml(displayLabel)}<span class="category-badge">${tagsToShow.length}</span></span>
+            </div>
+            <div class="wildcard-items show ps-1">${_tdbChipsHtml(tagsToShow)}</div>`;
+        container.appendChild(div);
+        found++;
+    }
+    if (!found) container.innerHTML = '<p class="text-muted text-center mt-3" style="font-size:.82rem;">找不到符合的標籤</p>';
+}
+
 // ─── Danbooru ─────────────────────────────────────────────────
 function danQuickSearch(tags) {
     document.getElementById('dan-search').value = tags;
     danSearch();
+}
+
+function toggleDanRating(btn) {
+    const r = btn.dataset.rating;
+    if (_danRatings.has(r)) { _danRatings.delete(r); btn.classList.remove('active'); }
+    else                    { _danRatings.add(r);    btn.classList.add('active');    }
+}
+
+function _buildSearchTags() {
+    let tags = danCurrentTags;
+    if (_danRatings.size > 0 && _danRatings.size < 4) {
+        const rArr = [..._danRatings];
+        if (rArr.length === 1) {
+            tags = `${tags} rating:${rArr[0]}`.trim();
+        } else {
+            tags = `${tags} ${rArr.map(r => `~rating:${r}`).join(' ')}`.trim();
+        }
+    }
+    return tags;
+}
+
+function toggleDanCat(btn) {
+    const cat = btn.dataset.cat;
+    _danCatVisible[cat] = !_danCatVisible[cat];
+    btn.classList.toggle('active', _danCatVisible[cat]);
+    const grp = document.getElementById(`dan-group-${cat}`);
+    if (grp) grp.style.display = _danCatVisible[cat] ? '' : 'none';
 }
 
 async function danSearch(page = 1) {
@@ -976,7 +1222,7 @@ async function danSearch(page = 1) {
     statusEl.textContent = '搜尋中...';
     danHideTagPanel();
     try {
-        const params = new URLSearchParams({tags: danCurrentTags, limit: 20, page});
+        const params = new URLSearchParams({tags: _buildSearchTags(), limit: 20, page});
         const r = await fetch(`/api/danbooru/browse?${params}`);
         const data = await r.json();
         if (data.error) { gridEl.innerHTML = `<div class="text-danger text-center p-3" style="font-size:.8rem;">${escapeHtml(data.error)}</div>`; statusEl.textContent = ''; return; }
@@ -1005,26 +1251,32 @@ async function danSearch(page = 1) {
 
 function danSelectPost(post) {
     danSelectedPost = post;
-    // Highlight selected
     document.querySelectorAll('.dan-thumb').forEach(el => el.classList.remove('selected'));
     event.target.classList.add('selected');
-    // Show tag panel
-    const panel = document.getElementById('dan-tag-panel');
+
+    const panel   = document.getElementById('dan-tag-panel');
     const content = document.getElementById('dan-tags-content');
     panel.classList.remove('d-none');
 
-    const general   = Array.isArray(post.tags_general)   ? post.tags_general   : [];
     const character = Array.isArray(post.tags_character) ? post.tags_character : [];
     const artist    = Array.isArray(post.tags_artist)    ? post.tags_artist    : [];
+    const copyright = Array.isArray(post.tags_copyright) ? post.tags_copyright : [];
+    const general   = Array.isArray(post.tags_general)   ? post.tags_general   : [];
 
-    // Use data-tag + onclick="addTag(this.dataset.tag)" to safely handle tags with special chars
     const chipHtml = (tags, cls) =>
         tags.map(t => `<span class="tag-chip ${cls}" data-tag="${escapeHtml(t)}" onclick="addTag(this.dataset.tag)">${escapeHtml(t)}<button class="tag-add-btn" onclick="event.stopPropagation();openAddToDb(this.closest('[data-tag]').dataset.tag)" title="加入 Wildcard DB">+</button></span>`).join('');
 
-    content.innerHTML = chipHtml(character, 'tc') + chipHtml(artist, 'ta') + chipHtml(general, 'tg');
+    const groupHtml = (tags, cls, id) =>
+        tags.length ? `<div class="dan-tag-group" id="dan-group-${id}" style="${_danCatVisible[id] ? '' : 'display:none'}">${chipHtml(tags, cls)}</div>` : '';
 
-    // Async: batch-fetch translations from local Wildcard table and inject below each chip
-    const allTags = [...character, ...artist, ...general];
+    content.innerHTML =
+        groupHtml(character, 'tc',  'tc')  +
+        groupHtml(artist,    'ta',  'ta')  +
+        groupHtml(copyright, 'tco', 'tco') +
+        groupHtml(general,   'tg',  'tg');
+
+    // Batch-fetch translations and inject below matching chips
+    const allTags = [...character, ...artist, ...copyright, ...general];
     if (allTags.length > 0) {
         fetch('/api/danbooru/translate-tags', {
             method: 'POST',
@@ -1048,20 +1300,18 @@ function danHideTagPanel() {
 }
 
 function addTag(tag) {
-    const ta = document.getElementById('promptTextarea');
-    const sep = ta.value && !ta.value.endsWith(', ') && !ta.value.endsWith(',') ? ', ' : '';
-    ta.value += sep + tag.replace(/_/g, ' ');
-    updateStats();
+    insertIntoPrompt(tag.replace(/_/g, ' '));
 }
 
 function addAllDanTags() {
     if (!danSelectedPost) return;
-    const all = [
-        ...(Array.isArray(danSelectedPost.tags_character) ? danSelectedPost.tags_character : []),
-        ...(Array.isArray(danSelectedPost.tags_artist)    ? danSelectedPost.tags_artist    : []),
-        ...(Array.isArray(danSelectedPost.tags_general)   ? danSelectedPost.tags_general   : []),
-    ].map(t => t.replace(/_/g, ' '));
-
+    const toAdd = [];
+    if (_danCatVisible.tc)  toAdd.push(...(Array.isArray(danSelectedPost.tags_character) ? danSelectedPost.tags_character : []));
+    if (_danCatVisible.ta)  toAdd.push(...(Array.isArray(danSelectedPost.tags_artist)    ? danSelectedPost.tags_artist    : []));
+    if (_danCatVisible.tco) toAdd.push(...(Array.isArray(danSelectedPost.tags_copyright) ? danSelectedPost.tags_copyright : []));
+    if (_danCatVisible.tg)  toAdd.push(...(Array.isArray(danSelectedPost.tags_general)   ? danSelectedPost.tags_general   : []));
+    if (!toAdd.length) return;
+    const all = toAdd.map(t => t.replace(/_/g, ' '));
     const ta = document.getElementById('promptTextarea');
     const sep = ta.value.trim() ? ', ' : '';
     ta.value += sep + all.join(', ');

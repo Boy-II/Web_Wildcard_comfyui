@@ -22,6 +22,48 @@
     <h2><i class="bi bi-gear-fill"></i> 設定</h2>
 </div>
 
+<!-- ── API 功能設定 ──────────────────────────────────────────── -->
+<div class="row g-3 mb-3">
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header fw-bold">
+                <i class="bi bi-translate text-primary me-1"></i> 翻譯功能
+            </div>
+            <div class="card-body">
+                <div class="form-text text-muted mb-2">選擇翻譯 wildcard 時使用的 LLM 設定檔。</div>
+                <div class="input-group">
+                    <select class="form-select" id="trans-profile-sel">
+                        <option value="">— 請選擇設定檔 —</option>
+                    </select>
+                    <button class="btn btn-primary" id="btn-activate-trans">
+                        <i class="bi bi-play-circle"></i> 啟用
+                    </button>
+                </div>
+                <div class="form-text mt-1" id="trans-profile-status"></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header fw-bold">
+                <i class="bi bi-robot text-success me-1"></i> AI 助手
+            </div>
+            <div class="card-body">
+                <div class="form-text text-muted mb-2">選擇 AI 助手對話時使用的 LLM 設定檔。</div>
+                <div class="input-group">
+                    <select class="form-select" id="asst-profile-sel">
+                        <option value="">— 請選擇設定檔 —</option>
+                    </select>
+                    <button class="btn btn-success" id="btn-save-asst">
+                        <i class="bi bi-save"></i> 儲存
+                    </button>
+                </div>
+                <div class="form-text mt-1" id="asst-profile-status"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="row g-3">
     <!-- LEFT: Profile list -->
     <div class="col-md-4">
@@ -56,9 +98,6 @@
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span class="fw-bold" id="form-panel-title"><i class="bi bi-pencil"></i> 編輯設定檔</span>
                     <div class="d-flex gap-2">
-                        <button class="btn btn-sm btn-success" id="btn-activate-profile" style="display:none;">
-                            <i class="bi bi-play-circle"></i> 啟用此設定
-                        </button>
                         <button class="btn btn-sm btn-danger" id="btn-delete-profile" style="display:none;">
                             <i class="bi bi-trash"></i>
                         </button>
@@ -249,7 +288,6 @@
     const formPanel     = document.getElementById('profile-form-panel');
     const placeholder   = document.getElementById('profile-placeholder');
     const form          = document.getElementById('profile-form');
-    const btnActivate   = document.getElementById('btn-activate-profile');
     const btnDelete     = document.getElementById('btn-delete-profile');
     const panelTitle    = document.getElementById('form-panel-title');
 
@@ -273,7 +311,69 @@
         const r = await api('/api/translation-profiles');
         profiles = await r.json();
         renderProfileList();
+        renderFunctionSelectors();
     }
+
+    function renderFunctionSelectors() {
+        const transSel = document.getElementById('trans-profile-sel');
+        const asstSel  = document.getElementById('asst-profile-sel');
+        const curTrans = profiles.find(p => p.is_active);
+
+        const opts = profiles.map(p =>
+            `<option value="${p.id}">${escHtml(p.name)} (${p.provider}/${escHtml(p.model_name || '?')})</option>`
+        ).join('');
+
+        transSel.innerHTML = '<option value="">— 請選擇設定檔 —</option>' + opts;
+        asstSel.innerHTML  = '<option value="">— 請選擇設定檔 —</option>' + opts;
+
+        if (curTrans) {
+            transSel.value = curTrans.id;
+            document.getElementById('trans-profile-status').innerHTML =
+                `<span class="text-success"><i class="bi bi-check-circle-fill"></i> 目前啟用：${escHtml(curTrans.name)}</span>`;
+        } else {
+            document.getElementById('trans-profile-status').textContent = '尚未啟用任何設定檔';
+        }
+    }
+
+    async function loadAsstProfile() {
+        const r = await api('/api/assistant/settings');
+        const d = await r.json();
+        const sel = document.getElementById('asst-profile-sel');
+        if (d.current_profile_id) {
+            sel.value = d.current_profile_id;
+            document.getElementById('asst-profile-status').innerHTML =
+                `<span class="text-success"><i class="bi bi-check-circle-fill"></i> 目前使用：${escHtml(d.current_profile_name || '?')}</span>`;
+        } else {
+            document.getElementById('asst-profile-status').textContent = '尚未設定 AI 助手設定檔';
+        }
+    }
+
+    document.getElementById('btn-activate-trans').addEventListener('click', async () => {
+        const id = parseInt(document.getElementById('trans-profile-sel').value);
+        if (!id) return;
+        const r = await api(`/api/translation-profiles/${id}/activate`, { method: 'POST' });
+        if (r.ok) {
+            toast('翻譯設定檔已啟用');
+            await loadProfiles();
+            if (selectedId) openProfile(selectedId);
+        } else {
+            toast('啟用失敗', 'danger');
+        }
+    });
+
+    document.getElementById('btn-save-asst').addEventListener('click', async () => {
+        const id = parseInt(document.getElementById('asst-profile-sel').value) || null;
+        const r = await api('/api/assistant/settings', {
+            method: 'PUT',
+            body: JSON.stringify({ profile_id: id })
+        });
+        if (r.ok) {
+            toast('AI 助手設定檔已儲存');
+            await loadAsstProfile();
+        } else {
+            toast('儲存失敗', 'danger');
+        }
+    });
 
     function renderProfileList() {
         if (profiles.length === 0) {
@@ -312,12 +412,7 @@
         if (!p) return;
 
         panelTitle.innerHTML = '<i class="bi bi-pencil"></i> 編輯設定檔';
-        btnActivate.style.display = '';
         btnDelete.style.display = '';
-        btnActivate.textContent = p.is_active ? '✓ 已啟用' : '啟用此設定';
-        btnActivate.className = p.is_active
-            ? 'btn btn-sm btn-outline-success disabled'
-            : 'btn btn-sm btn-success';
 
         document.getElementById('f-id').value = id;
         document.getElementById('f-name').value = p.name;
@@ -374,7 +469,6 @@
     document.getElementById('btn-new-profile').addEventListener('click', () => {
         selectedId = null;
         panelTitle.innerHTML = '<i class="bi bi-plus-circle"></i> 新增設定檔';
-        btnActivate.style.display = 'none';
         btnDelete.style.display = 'none';
 
         document.getElementById('f-id').value = '';
@@ -435,21 +529,6 @@
         } else {
             const err = await r.json();
             toast(err.error || '儲存失敗', 'danger');
-        }
-    });
-
-    // --- Activate ---
-    btnActivate.addEventListener('click', async () => {
-        if (!selectedId) return;
-        const r = await api(`/api/translation-profiles/${selectedId}/activate`, { method: 'POST' });
-        if (r.ok) {
-            const data = await r.json();
-            toast(data.message);
-            await loadProfiles();
-            openProfile(selectedId);
-        } else {
-            const err = await r.json();
-            toast(err.error || '啟用失敗', 'danger');
         }
     });
 
@@ -590,7 +669,7 @@
         else toast('儲存失敗', 'danger');
     });
 
-    loadProfiles();
+    loadProfiles().then(loadAsstProfile);
     loadSharedPrompt();
     loadOptimizationPrompt();
 })();

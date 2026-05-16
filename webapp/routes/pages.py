@@ -76,7 +76,10 @@ def _name_from_impact_path(wildcard_path: str) -> str:
 def api_get_prompt_builder_wildcards():
     """獲取所有 wildcard 分類和內容，用於 Prompt Builder"""
     try:
-        categories = Category.query.order_by(Category.level, Category.sort_order).all()
+        categories = sorted(
+            Category.query.order_by(Category.level).all(),
+            key=lambda c: (c.level, (c.display_name or c.name or ''))
+        )
 
         result = []
         for category in categories:
