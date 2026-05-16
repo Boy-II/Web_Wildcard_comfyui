@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from flask import Blueprint, request, jsonify, current_app
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 from webapp.models import db, Wildcard, Category
 from webapp.services import translation_service
@@ -74,7 +75,11 @@ def api_create_wildcard():
         notes=data.get('notes')
     )
     db.session.add(wildcard)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({'error': f"「{data['content']}」已存在於該分類中"}), 409
     return jsonify(wildcard.to_dict()), 201
 
 

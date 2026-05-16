@@ -11,7 +11,10 @@
     height: 100vh;
     padding: .75rem 1.25rem;
     overflow: hidden;
+    transition: grid-template-columns .2s ease;
 }
+/* Danbooru mode: left panel expands for image browsing */
+.pb-wrap.dan-mode { grid-template-columns: 520px 1fr 290px; }
 
 .pb-left, .pb-center, .pb-right { min-height: 0; }
 
@@ -124,7 +127,7 @@
 #dan-grid::-webkit-scrollbar-thumb { background: var(--border-color); }
 .dan-grid-inner {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
     gap: 3px;
     padding: 3px;
 }
@@ -144,25 +147,61 @@
     flex-shrink: 0;
     border-top: 1px solid var(--border-color);
     padding: .4rem .6rem;
-    max-height: 200px;
+    max-height: 220px;
     overflow-y: auto;
 }
+.pb-wrap.dan-mode .dan-tag-panel { max-height: 340px; }
 .tag-chip {
     display: inline-block;
-    padding: .1rem .38rem;
-    border-radius: 4px;
-    font-size: .7rem;
-    margin: 1.5px;
+    position: relative;
+    padding: .12rem .42rem;
+    border-radius: 5px;
+    font-size: .72rem;
+    margin: 2px;
     cursor: pointer;
     border: 1px solid var(--border-color);
     color: var(--text-secondary);
     background: var(--content-bg);
     transition: all .12s;
+    vertical-align: top;
+    line-height: 1.4;
 }
 .tag-chip:hover { border-color: var(--accent); color: var(--accent); }
+.tag-add-btn {
+    display: none;
+    position: absolute;
+    top: -5px; right: -5px;
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    background: #0d6efd;
+    color: #fff;
+    border: none;
+    font-size: 11px;
+    line-height: 16px;
+    text-align: center;
+    cursor: pointer;
+    padding: 0;
+    z-index: 2;
+}
+.tag-chip:hover .tag-add-btn { display: block; }
+#dan-add-panel {
+    background: var(--bs-body-bg);
+    border: 1px solid var(--bs-border-color);
+    border-radius: 6px;
+    padding: .4rem .5rem;
+    margin: 0 .2rem .3rem;
+}
 .tag-chip.tg { border-color: #3b82f680; color: #3b82f6; }
 .tag-chip.tc { border-color: #10b98180; color: #10b981; }
 .tag-chip.ta { border-color: #f59e0b80; color: #f59e0b; }
+.tag-zh {
+    display: block;
+    font-size: .62rem;
+    opacity: .75;
+    line-height: 1.25;
+    margin-top: .05rem;
+    font-weight: normal;
+}
 
 /* ── Editor ─────────────────────────────────────────────────── */
 .pb-toolbar {
@@ -283,6 +322,7 @@
           <div class="mt-1">輸入 tag 後按搜尋</div>
         </div>
       </div>
+      <div id="dan-add-panel" class="d-none"></div>
       <div id="dan-tag-panel" class="dan-tag-panel d-none">
         <div class="d-flex align-items-center mb-1 gap-2">
           <small class="fw-semibold flex-grow-1" style="font-size:.75rem;">提取的 Tags</small>
@@ -384,9 +424,22 @@
         <span class="fw-semibold" style="font-size:.82rem;"><i class="bi bi-cpu me-1 text-primary"></i>ComfyUI 執行</span>
       </div>
       <div class="card-body py-2">
-        <select id="comfy-wf-select" class="form-select form-select-sm mb-2">
+        <select id="comfy-wf-select" class="form-select form-select-sm mb-2"
+                onchange="loadBuilderParams(this.value)">
           <option value="">— 選擇工作流 —</option>
         </select>
+
+        <!-- Dynamic parameter panel (filled once a workflow is chosen) -->
+        <div id="builder-params" class="d-none mb-2">
+          <div class="d-flex align-items-center mb-1">
+            <span style="font-size:.7rem; font-weight:600; color:var(--bs-secondary-color); letter-spacing:.04em;">參數設置</span>
+            <a href="/comfy-workflows" class="ms-auto text-muted" style="font-size:.7rem;" title="在工作流頁面管理">
+              <i class="bi bi-box-arrow-up-right"></i>
+            </a>
+          </div>
+          <div id="builder-params-inner"></div>
+        </div>
+
         <div class="d-flex gap-1 mb-2">
           <button class="btn btn-success btn-sm flex-grow-1" onclick="runFromBuilder()">
             <i class="bi bi-play-fill"></i> 執行
@@ -394,9 +447,6 @@
           <button class="btn btn-outline-secondary btn-sm" id="builder-run-stop" style="display:none;" onclick="stopBuilderPoll()">
             <i class="bi bi-stop-fill"></i>
           </button>
-          <a href="/comfy-workflows" class="btn btn-outline-secondary btn-sm" title="管理工作流">
-            <i class="bi bi-box-arrow-up-right"></i>
-          </a>
         </div>
         <div id="builder-run-status" class="text-muted" style="font-size:.75rem;"></div>
         <div id="builder-run-error" class="text-danger d-none" style="font-size:.75rem;"></div>
@@ -536,6 +586,7 @@ function switchPbTab(tab) {
     document.getElementById('pane-dan').classList.toggle('d-none', isWc);
     document.getElementById('tab-btn-wc').classList.toggle('active', isWc);
     document.getElementById('tab-btn-dan').classList.toggle('active', !isWc);
+    document.querySelector('.pb-wrap').classList.toggle('dan-mode', !isWc);
 }
 
 // ─── Syntax help toggle ───────────────────────────────────────
@@ -747,10 +798,8 @@ async function generateMultiplePreviews(count) {
 
 // ─── Editor utils ─────────────────────────────────────────────
 function clearPrompt() {
-    if (confirm('確定要清空提示詞嗎？')) {
-        document.getElementById('promptTextarea').value = '';
-        updateStats();
-    }
+    document.getElementById('promptTextarea').value = '';
+    updateStats();
 }
 
 async function copyToClipboard() {
@@ -853,8 +902,9 @@ async function danSearch(page = 1) {
     try {
         const params = new URLSearchParams({tags: danCurrentTags, limit: 20, page});
         const r = await fetch(`/api/danbooru/browse?${params}`);
-        const posts = await r.json();
-        if (posts.error) { gridEl.innerHTML = `<div class="text-danger text-center p-3" style="font-size:.8rem;">${escapeHtml(posts.error)}</div>`; statusEl.textContent = ''; return; }
+        const data = await r.json();
+        if (data.error) { gridEl.innerHTML = `<div class="text-danger text-center p-3" style="font-size:.8rem;">${escapeHtml(data.error)}</div>`; statusEl.textContent = ''; return; }
+        const posts = data.posts || [];
         statusEl.textContent = posts.length ? `${posts.length} 筆結果` : '無結果';
         if (!posts.length) {
             gridEl.innerHTML = '<div class="text-muted text-center p-3" style="font-size:.8rem;">找不到結果，請嘗試其他 tag</div>';
@@ -862,7 +912,7 @@ async function danSearch(page = 1) {
         }
         gridEl.innerHTML = `<div class="dan-grid-inner">${
             posts.map(p => `<img src="${escapeHtml(p.preview_url)}" class="dan-thumb"
-                title="${escapeHtml(p.tags_general.split(' ').slice(0,5).join(', '))}"
+                title="${escapeHtml((Array.isArray(p.tags_general) ? p.tags_general : []).slice(0,5).join(', '))}"
                 onclick='danSelectPost(${JSON.stringify(p).replace(/'/g,"\\'")})'
                 onerror="this.style.display='none'">`).join('')
         }</div>`;
@@ -887,15 +937,33 @@ function danSelectPost(post) {
     const content = document.getElementById('dan-tags-content');
     panel.classList.remove('d-none');
 
-    const general   = post.tags_general   ? post.tags_general.split(' ').filter(Boolean)   : [];
-    const character = post.tags_character ? post.tags_character.split(' ').filter(Boolean) : [];
-    const artist    = post.tags_artist    ? post.tags_artist.split(' ').filter(Boolean)    : [];
+    const general   = Array.isArray(post.tags_general)   ? post.tags_general   : [];
+    const character = Array.isArray(post.tags_character) ? post.tags_character : [];
+    const artist    = Array.isArray(post.tags_artist)    ? post.tags_artist    : [];
 
-    content.innerHTML = [
-        character.map(t => `<span class="tag-chip tc" onclick="addTag('${t}')">${t}</span>`).join(''),
-        artist.map(t    => `<span class="tag-chip ta" onclick="addTag('${t}')">${t}</span>`).join(''),
-        general.map(t   => `<span class="tag-chip tg" onclick="addTag('${t}')">${t}</span>`).join(''),
-    ].join('');
+    // Use data-tag + onclick="addTag(this.dataset.tag)" to safely handle tags with special chars
+    const chipHtml = (tags, cls) =>
+        tags.map(t => `<span class="tag-chip ${cls}" data-tag="${escapeHtml(t)}" onclick="addTag(this.dataset.tag)">${escapeHtml(t)}<button class="tag-add-btn" onclick="event.stopPropagation();openAddToDb(this.closest('[data-tag]').dataset.tag)" title="加入 Wildcard DB">+</button></span>`).join('');
+
+    content.innerHTML = chipHtml(character, 'tc') + chipHtml(artist, 'ta') + chipHtml(general, 'tg');
+
+    // Async: batch-fetch translations from local Wildcard table and inject below each chip
+    const allTags = [...character, ...artist, ...general];
+    if (allTags.length > 0) {
+        fetch('/api/danbooru/translate-tags', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({tags: allTags})
+        })
+        .then(r => r.json())
+        .then(translations => {
+            content.querySelectorAll('.tag-chip[data-tag]').forEach(chip => {
+                const zh = translations[chip.dataset.tag];
+                if (zh) chip.insertAdjacentHTML('beforeend', `<span class="tag-zh">${escapeHtml(zh)}</span>`);
+            });
+        })
+        .catch(() => {});
+    }
 }
 
 function danHideTagPanel() {
@@ -913,10 +981,10 @@ function addTag(tag) {
 function addAllDanTags() {
     if (!danSelectedPost) return;
     const all = [
-        ...(danSelectedPost.tags_character ? danSelectedPost.tags_character.split(' ') : []),
-        ...(danSelectedPost.tags_artist    ? danSelectedPost.tags_artist.split(' ')    : []),
-        ...(danSelectedPost.tags_general   ? danSelectedPost.tags_general.split(' ')   : []),
-    ].filter(Boolean).map(t => t.replace(/_/g, ' '));
+        ...(Array.isArray(danSelectedPost.tags_character) ? danSelectedPost.tags_character : []),
+        ...(Array.isArray(danSelectedPost.tags_artist)    ? danSelectedPost.tags_artist    : []),
+        ...(Array.isArray(danSelectedPost.tags_general)   ? danSelectedPost.tags_general   : []),
+    ].map(t => t.replace(/_/g, ' '));
 
     const ta = document.getElementById('promptTextarea');
     const sep = ta.value.trim() ? ', ' : '';
@@ -925,7 +993,100 @@ function addAllDanTags() {
     showToast(`已加入 ${all.length} 個 tag`, 'success');
 }
 
+// ─── Danbooru → Add to Wildcard DB ───────────────────────────
+let _addToDbTag = null;
+
+async function openAddToDb(tag) {
+    _addToDbTag = tag.replace(/_/g, ' ');
+    const panel = document.getElementById('dan-add-panel');
+
+    const cats = allCategories;
+    if (!cats.length) { showToast('請先載入分類', 'warning'); return; }
+
+    // Pre-select the "other/未分類" category
+    const otherCat = cats.find(c =>
+        (c.wildcard_path || '').toLowerCase() === 'other' ||
+        (c.name || '').toLowerCase() === 'other' ||
+        (c.display_name || '').includes('未分類') ||
+        (c.display_name || '').includes('未整理')
+    );
+
+    const options = cats
+        .map(c => `<option value="${c.id}"${otherCat && c.id === otherCat.id ? ' selected' : ''}>${escapeHtml(c.display_name || c.name)}</option>`)
+        .join('');
+
+    panel.innerHTML = `
+        <div class="d-flex align-items-center gap-1 mb-1">
+            <span style="font-size:.72rem; font-weight:600;">加入：</span>
+            <code style="font-size:.7rem; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
+                  title="${escapeHtml(_addToDbTag)}">${escapeHtml(_addToDbTag)}</code>
+            <button class="btn-close" style="font-size:.55rem;" onclick="closeAddPanel()"></button>
+        </div>
+        <div class="d-flex gap-1">
+            <select id="dan-add-cat-sel" class="form-select form-select-sm flex-grow-1" style="font-size:.75rem;">
+                <option value="">— 選擇分類 —</option>
+                ${options}
+            </select>
+            <button class="btn btn-sm btn-primary py-0 px-2" style="font-size:.72rem;" onclick="confirmAddToDb()">
+                <i class="bi bi-plus-lg"></i>
+            </button>
+        </div>`;
+    panel.classList.remove('d-none');
+}
+
+function closeAddPanel() {
+    document.getElementById('dan-add-panel').classList.add('d-none');
+}
+
+async function confirmAddToDb() {
+    const tag = _addToDbTag;
+    if (!tag) return;
+    const catId = parseInt(document.getElementById('dan-add-cat-sel').value);
+    if (!catId) { showToast('請選擇分類', 'warning'); return; }
+    try {
+        const r = await fetch('/api/wildcards', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ content: tag, category_id: catId })
+        });
+        const d = await r.json();
+        if (!r.ok) { showToast(d.error || '新增失敗', 'danger'); return; }
+        showToast(`已新增：${tag}`, 'success');
+        closeAddPanel();
+        _addToDbTag = null;
+    } catch { showToast('新增失敗', 'danger'); }
+}
+
 // ─── ComfyUI execution from builder ──────────────────────────
+
+const _B_SAMPLER_LIST = ['euler','euler_ancestral','heun','dpm_2','dpm_2_ancestral','lms',
+    'dpm_fast','dpm_adaptive','dpmpp_2s_ancestral','dpmpp_sde','dpmpp_2m',
+    'dpmpp_2m_sde','dpmpp_3m_sde','ddim','uni_pc'];
+const _B_SCHEDULER_LIST = ['normal','karras','exponential','sgm_uniform','simple','ddim_uniform','beta'];
+const _B_PH_DEFS = [
+    { key:'model',           label:'模型',      type:'model',   full:true },
+    { key:'negative_prompt', label:'負面提示詞', type:'textarea',full:true, rows:2 },
+    { key:'width',           label:'寬度',      type:'number',  full:false, hint:'512',  def:512  },
+    { key:'height',          label:'高度',      type:'number',  full:false, hint:'512',  def:512  },
+    { key:'steps',           label:'步數',      type:'number',  full:false, hint:'20',   def:20   },
+    { key:'seed',            label:'種子',      type:'number',  full:false, hint:'-1',   def:-1   },
+    { key:'cfg',             label:'CFG',       type:'number',  full:false, hint:'7',    def:7, step:0.5 },
+    { key:'denoise',         label:'Denoise',   type:'number',  full:false, hint:'1.0',  def:1.0, step:0.05 },
+    { key:'sampler_name',    label:'採樣器',    type:'sampler', full:false },
+    { key:'scheduler',       label:'調度器',    type:'sched',   full:false },
+];
+const _B_KNOWN_KEYS = new Set(_B_PH_DEFS.map(d => d.key));
+const _builderWfCache = {};
+
+function _bPhKey(id)   { return `comfy_ph_${id}`; }
+function _bLoadSaved(id) {
+    try { return JSON.parse(localStorage.getItem(_bPhKey(id)) || '{}'); } catch { return {}; }
+}
+function _bSave(id, vals) {
+    const keep = Object.fromEntries(Object.entries(vals).filter(([k]) => k !== 'prompt'));
+    try { localStorage.setItem(_bPhKey(id), JSON.stringify(keep)); } catch {}
+}
+
 async function loadComfyWorkflows() {
     try {
         const wfs = await fetch('/api/comfy/workflows').then(r => r.json());
@@ -936,11 +1097,112 @@ async function loadComfyWorkflows() {
     } catch {}
 }
 
+async function loadBuilderParams(wfId) {
+    const panel  = document.getElementById('builder-params');
+    const inner  = document.getElementById('builder-params-inner');
+    if (!wfId) { panel.classList.add('d-none'); inner.innerHTML = ''; return; }
+
+    // Fetch workflow JSON (cached)
+    let wf = _builderWfCache[wfId];
+    if (!wf) {
+        try {
+            wf = await fetch(`/api/comfy/workflows/${wfId}`).then(r => r.json());
+            _builderWfCache[wfId] = wf;
+        } catch { return; }
+    }
+
+    // Detect placeholders, skip 'prompt' (comes from the textarea)
+    const found = new Set();
+    let m; const re = /%(\w+)%/g;
+    while ((m = re.exec(wf.workflow_json || ''))) found.add(m[1]);
+    found.delete('prompt');
+
+    if (!found.size) { panel.classList.add('d-none'); inner.innerHTML = ''; return; }
+
+    const saved = _bLoadSaved(wfId);
+    const active = _B_PH_DEFS.filter(d => found.has(d.key));
+    for (const key of found) {
+        if (!_B_KNOWN_KEYS.has(key)) active.push({ key, label: key, type:'text', full:true });
+    }
+
+    // Fetch model list if needed
+    let modelOptions = null;
+    if (found.has('model')) {
+        try {
+            const resp = await fetch('/api/comfy/models').then(r => r.json());
+            if (Array.isArray(resp) && resp.length > 0) modelOptions = resp;
+        } catch {}
+    }
+
+    // Render
+    const fulls  = active.filter(d => d.full);
+    const halves = active.filter(d => !d.full);
+    let html = '';
+    for (const def of fulls)  html += _bFieldHtml(def, modelOptions, saved);
+    if (halves.length) {
+        html += '<div class="row g-1">';
+        for (const def of halves) html += `<div class="col-6">${_bFieldHtml(def, modelOptions, saved)}</div>`;
+        html += '</div>';
+    }
+    inner.innerHTML = html;
+    panel.classList.remove('d-none');
+}
+
+function _bFieldHtml(def, modelOptions, saved) {
+    const sv = saved[def.key] !== undefined ? saved[def.key] : (def.def !== undefined ? def.def : '');
+    const label = `<div style="font-size:.7rem; color:var(--bs-secondary-color); margin-bottom:.1rem;">${escapeHtml(def.label)}</div>`;
+    let input;
+    if (def.key === 'model' && modelOptions) {
+        input = `<select class="form-select form-select-sm" data-ph="model" style="font-size:.78rem;">
+            <option value="">— 選擇模型 —</option>
+            ${modelOptions.map(m => `<option value="${escapeHtml(m)}" ${escapeHtml(m)===String(sv)?'selected':''}>${escapeHtml(m)}</option>`).join('')}
+        </select>`;
+    } else if (def.key === 'model') {
+        input = `<input type="text" class="form-control form-control-sm" data-ph="model"
+            style="font-size:.78rem;" placeholder="model.safetensors" value="${escapeHtml(String(sv))}">`;
+    } else if (def.type === 'textarea') {
+        input = `<textarea class="form-control form-control-sm" data-ph="${escapeHtml(def.key)}"
+            style="font-size:.78rem;" rows="${def.rows||2}">${escapeHtml(String(sv))}</textarea>`;
+    } else if (def.type === 'sampler') {
+        input = `<select class="form-select form-select-sm" data-ph="sampler_name" style="font-size:.78rem;">
+            <option value="">— 採樣器 —</option>
+            ${_B_SAMPLER_LIST.map(s => `<option value="${s}" ${s===sv?'selected':''}>${s}</option>`).join('')}
+        </select>`;
+    } else if (def.type === 'sched') {
+        input = `<select class="form-select form-select-sm" data-ph="scheduler" style="font-size:.78rem;">
+            <option value="">— 調度器 —</option>
+            ${_B_SCHEDULER_LIST.map(s => `<option value="${s}" ${s===sv?'selected':''}>${s}</option>`).join('')}
+        </select>`;
+    } else {
+        input = `<input type="number" class="form-control form-control-sm" data-ph="${escapeHtml(def.key)}"
+            style="font-size:.78rem;" value="${sv !== '' ? sv : ''}"
+            placeholder="${escapeHtml(def.hint||'')}"
+            ${def.step ? `step="${def.step}"` : ''}>`;
+    }
+    return `<div class="mb-1">${label}${input}</div>`;
+}
+
+function collectBuilderParams() {
+    const wfId = document.getElementById('comfy-wf-select').value;
+    const result = {};
+    document.querySelectorAll('#builder-params-inner [data-ph]').forEach(el => {
+        const key = el.dataset.ph;
+        const val = el.value.trim();
+        if (!val) return;
+        result[key] = (el.tagName === 'SELECT' || el.type !== 'number') ? val : Number(val);
+    });
+    if (wfId) _bSave(wfId, result);
+    return result;
+}
+
 async function runFromBuilder() {
     const wfId = document.getElementById('comfy-wf-select').value;
     if (!wfId) { alert('請先選擇工作流'); return; }
     const prompt = document.getElementById('promptTextarea').value.trim();
     if (!prompt) { alert('提示詞不能為空'); return; }
+
+    const placeholders = collectBuilderParams();
+    placeholders.prompt = prompt;
 
     setBuilderStatus('🔄 送往 ComfyUI...', false);
     document.getElementById('builder-images').innerHTML = '';
@@ -949,7 +1211,7 @@ async function runFromBuilder() {
     try {
         const r = await fetch(`/api/comfy/workflows/${wfId}/run`, {
             method: 'POST', headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({placeholders: {prompt}})
+            body: JSON.stringify({placeholders})
         });
         const d = await r.json();
         if (d.error) { setBuilderStatus('', true, d.error); return; }

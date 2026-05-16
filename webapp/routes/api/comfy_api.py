@@ -324,4 +324,17 @@ def _apply_placeholders(wf_str: str, placeholders: dict) -> str:
                     .replace('\t', '\\t'))
             wf_str = wf_str.replace(token, safe)
 
+    # Auto-fill any unreplaced numeric placeholders so ComfyUI never receives a
+    # string value in an INT/FLOAT field (causes 400 "invalid literal" errors).
+    for key in _INT_PLACEHOLDERS:
+        quoted = f'"%{key}%"'
+        if quoted in wf_str:
+            default = random.randint(0, 2 ** 32 - 1) if key == 'seed' else 0
+            wf_str = wf_str.replace(quoted, str(default))
+    for key in _FLOAT_PLACEHOLDERS:
+        quoted = f'"%{key}%"'
+        if quoted in wf_str:
+            default = 1.0 if key == 'denoise' else 7.0
+            wf_str = wf_str.replace(quoted, str(default))
+
     return wf_str

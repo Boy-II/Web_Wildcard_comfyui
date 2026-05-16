@@ -188,6 +188,53 @@
         </div>
     </div>
 </div>
+
+<!-- ── Danbooru Account Settings ─────────────────────────────── -->
+<div class="row g-3 mt-1">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex align-items-center justify-content-between">
+                <span class="fw-bold">
+                    <i class="bi bi-images text-info me-2"></i>Danbooru 帳號設定
+                </span>
+                <button class="btn btn-sm btn-primary" id="btn-save-danbooru">
+                    <i class="bi bi-save"></i> 儲存
+                </button>
+            </div>
+            <div class="card-body">
+                <p class="form-text text-muted mb-3">
+                    設定帳號後可存取更多圖片（含 R-18 內容）。<br>
+                    API Key 請至
+                    <a href="https://danbooru.donmai.us/profile" target="_blank" rel="noopener">
+                        danbooru.donmai.us/profile
+                    </a> 頁面的「API Key」欄位取得。
+                </p>
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">帳號（Login）</label>
+                        <input type="text" class="form-control" id="danbooru-login"
+                               placeholder="您的 Danbooru 帳號（可留空）"
+                               autocomplete="username">
+                    </div>
+                    <div class="col-md-8">
+                        <label class="form-label fw-semibold">API Key</label>
+                        <div class="input-group">
+                            <input type="password" class="form-control" id="danbooru-api-key"
+                                   placeholder="留空表示不更新已儲存的 Key"
+                                   autocomplete="current-password">
+                            <button class="btn btn-outline-secondary" type="button"
+                                    id="btn-toggle-danbooru-key" title="顯示／隱藏">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                        </div>
+                        <div class="form-text" id="danbooru-key-hint">載入中...</div>
+                    </div>
+                </div>
+                <div id="danbooru-save-msg" class="mt-2" style="display:none;"></div>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -546,6 +593,63 @@
     loadProfiles();
     loadSharedPrompt();
     loadOptimizationPrompt();
+})();
+
+// ── Danbooru account settings (standalone, outside main IIFE) ──
+(function () {
+    const loginEl   = document.getElementById('danbooru-login');
+    const keyEl     = document.getElementById('danbooru-api-key');
+    const hintEl    = document.getElementById('danbooru-key-hint');
+    const msgEl     = document.getElementById('danbooru-save-msg');
+
+    async function load() {
+        try {
+            const d = await fetch('/api/danbooru/settings').then(r => r.json());
+            loginEl.value  = d.login || '';
+            hintEl.textContent = d.has_api_key
+                ? '✓ 已儲存 API Key（輸入新值以更新）'
+                : '尚未設定 API Key';
+            hintEl.className = 'form-text ' + (d.has_api_key ? 'text-success' : 'text-muted');
+        } catch {
+            hintEl.textContent = '無法載入設定';
+        }
+    }
+
+    function showMsg(html, type = 'success') {
+        msgEl.innerHTML = `<div class="alert alert-${type} py-1 mb-0">${html}</div>`;
+        msgEl.style.display = '';
+        setTimeout(() => { msgEl.style.display = 'none'; }, 3000);
+    }
+
+    document.getElementById('btn-toggle-danbooru-key').addEventListener('click', function () {
+        const input = keyEl;
+        const icon  = this.querySelector('i');
+        if (input.type === 'password') { input.type = 'text';     icon.className = 'bi bi-eye-slash'; }
+        else                           { input.type = 'password'; icon.className = 'bi bi-eye'; }
+    });
+
+    document.getElementById('btn-save-danbooru').addEventListener('click', async () => {
+        const body = { login: loginEl.value.trim() };
+        const apiKey = keyEl.value.trim();
+        if (apiKey) body.api_key = apiKey;
+
+        try {
+            const r = await fetch('/api/danbooru/settings', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            const d = await r.json();
+            if (!r.ok) { showMsg(d.error || '儲存失敗', 'danger'); return; }
+            showMsg(d.message || '已儲存');
+            keyEl.value = '';
+            await load();
+        } catch (e) {
+            showMsg('儲存失敗：' + e.message, 'danger');
+        }
+    });
+
+    load();
 })();
 </script>
 {% endblock %}

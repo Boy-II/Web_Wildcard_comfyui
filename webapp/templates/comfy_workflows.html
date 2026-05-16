@@ -3,17 +3,22 @@
 
 {% block extra_css %}
 <style>
-.wf-sidebar   { height: 100vh; overflow-y: auto; border-right: 1px solid #dee2e6; }
+.wf-sidebar   { height: 100vh; overflow-y: auto; border-right: 1px solid var(--bs-border-color); }
 .wf-main      { height: 100vh; overflow-y: auto; }
 .wf-item      { cursor: pointer; border-left: 3px solid transparent; }
-.wf-item:hover{ background: #f8f9fa; }
-.wf-item.active { border-left-color: #d97706; background: #fef3c7; }
+.wf-item:hover{ background: var(--bs-tertiary-bg); }
+.wf-item.active { border-left-color: #d97706; background: rgba(253, 230, 138, 0.45); }
+[data-bs-theme="dark"] .wf-item.active { background: rgba(217, 119, 6, 0.22); }
 .img-thumb    { object-fit: cover; height: 200px; width: 100%; cursor: zoom-in; border-radius: 4px; }
 .status-dot   { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 .status-dot.on  { background: #198754; }
 .status-dot.off { background: #dc3545; }
 .status-dot.checking { background: #ffc107; }
 #json-editor  { font-size: .78rem; min-height: 280px; resize: vertical; }
+/* Node editor */
+.ne-node { cursor: pointer; }
+.ne-node:hover .ne-rect { stroke-opacity: 1 !important; }
+#ne-canvas svg { color: var(--bs-body-color); display: block; }
 </style>
 {% endblock %}
 
@@ -24,7 +29,7 @@
   <div class="col-md-3 wf-sidebar">
 
     <!-- Toolbar -->
-    <div class="p-2 border-bottom d-flex align-items-center gap-1 sticky-top bg-white">
+    <div class="p-2 border-bottom d-flex align-items-center gap-1 sticky-top bg-body">
       <span class="fw-semibold flex-grow-1 ps-1">工作流</span>
       <button class="btn btn-sm btn-primary" onclick="showCreate()" title="新增">
         <i class="bi bi-plus-lg"></i>
@@ -32,7 +37,7 @@
     </div>
 
     <!-- Connection bar -->
-    <div class="px-3 py-2 border-bottom bg-light d-flex align-items-center gap-2" style="font-size:.82rem;">
+    <div class="px-3 py-2 border-bottom bg-body-secondary d-flex align-items-center gap-2" style="font-size:.82rem;">
       <span class="status-dot checking" id="dot"></span>
       <span id="conn-text" class="flex-grow-1 text-muted">檢查連線中...</span>
       <button class="btn btn-link btn-sm p-0 text-secondary" onclick="toggleUrlBar()" title="修改 URL">
@@ -115,6 +120,9 @@
           <p id="d-desc" class="text-muted mb-0"></p>
         </div>
         <div class="d-flex gap-2 flex-shrink-0">
+          <button class="btn btn-sm btn-outline-primary" onclick="openNodeEditor()">
+            <i class="bi bi-diagram-3"></i> 可視化
+          </button>
           <button class="btn btn-sm btn-outline-secondary" onclick="editCurrent()">
             <i class="bi bi-pencil"></i> 編輯
           </button>
@@ -171,6 +179,44 @@
 
     </div><!-- /pane-detail -->
   </div><!-- /main -->
+</div>
+
+<!-- ── Node Editor Modal ── -->
+<div class="modal fade" id="nodeEditorModal" tabindex="-1">
+  <div class="modal-dialog" style="max-width:92vw; margin:.5rem auto;">
+    <div class="modal-content" style="height:90vh;">
+      <div class="modal-header py-2 border-bottom">
+        <h6 class="modal-title mb-0"><i class="bi bi-diagram-3 text-primary me-2"></i>工作流可視化</h6>
+        <div class="d-flex gap-2 align-items-center ms-3 me-auto">
+          <small class="text-muted" id="ne-dirty-hint" style="display:none;">
+            <i class="bi bi-circle-fill text-warning" style="font-size:.5rem;"></i> 有未保存的修改
+          </small>
+        </div>
+        <button class="btn btn-sm btn-success me-2" onclick="saveNodeEdits()">
+          <i class="bi bi-floppy"></i> 保存修改
+        </button>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0 d-flex overflow-hidden" style="height:calc(90vh - 57px);">
+        <!-- SVG canvas -->
+        <div id="ne-canvas-wrap" class="flex-grow-1 overflow-auto p-2" style="background:var(--bs-body-bg);">
+          <div id="ne-canvas"></div>
+        </div>
+        <!-- Right property panel -->
+        <div class="border-start overflow-auto" style="width:300px; min-width:260px; font-size:.84rem;">
+          <div id="ne-panel-empty" class="text-center text-muted p-4 mt-3">
+            <i class="bi bi-cursor" style="font-size:2rem; opacity:.3;"></i>
+            <div class="mt-2">點擊節點查看輸入</div>
+          </div>
+          <div id="ne-panel-detail" class="d-none p-3">
+            <div class="fw-semibold mb-0" id="ne-node-title" style="font-size:.9rem;"></div>
+            <div class="text-muted mb-3" id="ne-node-id" style="font-size:.76rem;"></div>
+            <div id="ne-inputs-list"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- ── Image zoom modal ── -->
@@ -301,15 +347,49 @@ async function populateDetail() {
 // Placeholder system  (%model%  %prompt%  %seed%  ...)
 // ─────────────────────────────────────────────────────────────────────
 
-// Ordered definition of known placeholders
-const PH_DEFS = [
-    { key: 'model',  label: '模型',       type: 'text',     hint: '例如：v1-5-pruned-emaonly.safetensors' },
-    { key: 'prompt', label: '正面提示詞', type: 'textarea', hint: '輸入提示詞...' },
-    { key: 'seed',   label: '種子',       type: 'number',   hint: '留空則使用工作流預設值（-1 為隨機）' },
+const SAMPLER_LIST = [
+    'euler','euler_ancestral','heun','dpm_2','dpm_2_ancestral','lms',
+    'dpm_fast','dpm_adaptive','dpmpp_2s_ancestral','dpmpp_sde','dpmpp_2m',
+    'dpmpp_2m_sde','dpmpp_3m_sde','ddim','uni_pc'
+];
+const SCHEDULER_LIST = ['normal','karras','exponential','sgm_uniform','simple','ddim_uniform','beta'];
+const PRESET_SIZES = [
+    {label:'512×512',  w:512,  h:512},
+    {label:'768×768',  w:768,  h:768},
+    {label:'1024×1024',w:1024, h:1024},
+    {label:'832×1216', w:832,  h:1216},
+    {label:'1216×832', w:1216, h:832},
 ];
 
+// Ordered definition of known placeholders
+const PH_DEFS = [
+    { key:'model',           label:'模型',          type:'model',    full:true  },
+    { key:'prompt',          label:'正面提示詞',    type:'textarea', full:true,  hint:'輸入提示詞...',   rows:3 },
+    { key:'negative_prompt', label:'負面提示詞',    type:'textarea', full:true,  hint:'負面提示詞...',   rows:2 },
+    { key:'width',           label:'寬度',          type:'number',   full:false, hint:'512',  def:512,  min:64, max:8192, step:8 },
+    { key:'height',          label:'高度',          type:'number',   full:false, hint:'512',  def:512,  min:64, max:8192, step:8 },
+    { key:'steps',           label:'生成步數',      type:'number',   full:false, hint:'20',   def:20,   min:1,  max:150 },
+    { key:'seed',            label:'種子',          type:'number',   full:false, hint:'-1 (隨機)', def:-1 },
+    { key:'cfg',             label:'CFG',           type:'number',   full:false, hint:'7',    def:7,    min:1,  max:30,  step:0.5 },
+    { key:'denoise',         label:'Denoise',       type:'number',   full:false, hint:'1.0',  def:1.0,  min:0,  max:1,   step:0.05 },
+    { key:'sampler_name',    label:'採樣器',        type:'sampler',  full:false },
+    { key:'scheduler',       label:'調度器',        type:'sched',    full:false },
+];
+
+// localStorage helpers — saves per workflow ID
+function _phKey(id) { return `comfy_ph_${id}`; }
+function _loadSaved() {
+    if (!selected) return {};
+    try { return JSON.parse(localStorage.getItem(_phKey(selected.id)) || '{}'); } catch { return {}; }
+}
+function _saveDefaults(vals) {
+    if (!selected) return;
+    // Don't persist prompt (comes from prompt builder each time)
+    const toSave = Object.fromEntries(Object.entries(vals).filter(([k]) => k !== 'prompt'));
+    localStorage.setItem(_phKey(selected.id), JSON.stringify(toSave));
+}
+
 function detectPlaceholders(jsonStr) {
-    // Return Set of placeholder keys found in the raw JSON string
     const found = new Set();
     const re = /%(\w+)%/g;
     let m;
@@ -321,60 +401,67 @@ async function renderInputFields() {
     const container = document.getElementById('input-fields');
     const found = detectPlaceholders(selected.workflow_json);
 
-    // Collect active defs in defined order, then any unknown ones
     const active = PH_DEFS.filter(d => found.has(d.key));
     const knownKeys = new Set(PH_DEFS.map(d => d.key));
     for (const key of found) {
-        if (!knownKeys.has(key)) active.push({ key, label: key, type: 'text', hint: '' });
+        if (!knownKeys.has(key)) active.push({ key, label: key, type: 'text', full: true, hint: '' });
     }
 
     if (!active.length) {
-        container.innerHTML = `
-            <div class="text-muted" style="font-size:.85rem;">
-                工作流中未找到任何佔位符。<br>
-                請在 workflow JSON 中使用
-                <code class="bg-light px-1 rounded">%model%</code>、
-                <code class="bg-light px-1 rounded">%prompt%</code>、
-                <code class="bg-light px-1 rounded">%seed%</code>
-                標記需要替換的欄位。
-            </div>`;
+        container.innerHTML = `<div class="text-muted" style="font-size:.85rem;">
+            工作流中未找到佔位符。在 JSON 中使用
+            <code>%model%</code> <code>%prompt%</code> <code>%seed%</code> 等標記可替換欄位。
+        </div>`;
         return;
     }
 
-    // Pre-fetch model list if %model% is present
+    // Pre-fetch model list
     let modelOptions = null;
     if (found.has('model')) {
-        container.innerHTML = '<span class="text-muted" style="font-size:.85rem;"><i class="bi bi-hourglass-split"></i> 正在從 ComfyUI 取得模型列表...</span>';
+        container.innerHTML = '<span class="text-muted" style="font-size:.85rem;"><i class="bi bi-hourglass-split"></i> 正在取得模型列表...</span>';
         try {
             const resp = await apiFetch('/api/comfy/models');
             if (Array.isArray(resp) && resp.length > 0) modelOptions = resp;
-        } catch { /* fall back to text input */ }
+        } catch { /* fall back to text */ }
     }
 
-    container.innerHTML = active.map(def => {
-        const labelHtml = `<label class="form-label fw-semibold mb-1">
-            <code class="text-primary bg-light px-1 rounded" style="font-size:.82rem;">%${esc(def.key)}%</code>
-            <span class="ms-1 text-dark">${esc(def.label)}</span>
-        </label>`;
+    const saved = _loadSaved();
+    const hasPreset = found.has('width') && found.has('height');
 
-        let inputHtml;
-        if (def.key === 'model' && modelOptions) {
-            inputHtml = `<select class="form-select" data-ph="model">
-                <option value="">— 選擇模型 —</option>
-                ${modelOptions.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('')}
-            </select>`;
-        } else if (def.type === 'textarea') {
-            inputHtml = `<textarea class="form-control" data-ph="${esc(def.key)}" rows="3"
-                          placeholder="${esc(def.hint)}"></textarea>`;
-        } else {
-            inputHtml = `<input type="${def.type}" class="form-control" data-ph="${esc(def.key)}"
-                          placeholder="${esc(def.hint)}">`;
+    // Build HTML — group half-width fields into pairs
+    let html = '';
+    if (hasPreset) {
+        html += `<div class="mb-2">
+            <small class="text-muted fw-semibold">預設尺寸</small><br>
+            <div class="d-flex flex-wrap gap-1 mt-1">
+                ${PRESET_SIZES.map(p =>
+                    `<button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2"
+                        style="font-size:.75rem;" onclick="applyPreset(${p.w},${p.h})">${p.label}</button>`
+                ).join('')}
+            </div>
+        </div>`;
+    }
+
+    const halves = active.filter(d => !d.full);
+    const fulls  = active.filter(d => d.full);
+
+    // Full-width fields
+    for (const def of fulls) {
+        html += `<div class="mb-3">${_fieldHtml(def, modelOptions, saved)}</div>`;
+    }
+
+    // Half-width fields in 2-column grid
+    if (halves.length) {
+        html += '<div class="row g-2">';
+        for (const def of halves) {
+            html += `<div class="col-6">${_fieldHtml(def, modelOptions, saved)}</div>`;
         }
+        html += '</div>';
+    }
 
-        return `<div class="mb-3">${labelHtml}${inputHtml}</div>`;
-    }).join('');
+    container.innerHTML = html;
 
-    // Auto-fill %prompt% when arriving from the prompt builder
+    // Auto-fill %prompt% from prompt builder session
     const pending = sessionStorage.getItem('comfy_pending_prompt');
     if (pending) {
         const el = container.querySelector('[data-ph="prompt"]');
@@ -382,11 +469,61 @@ async function renderInputFields() {
             el.value = pending;
             sessionStorage.removeItem('comfy_pending_prompt');
             document.getElementById('pending-prompt-hint').classList.add('d-none');
-            // Brief highlight so the user notices
             el.classList.add('border-success');
             setTimeout(() => el.classList.remove('border-success'), 2000);
         }
     }
+}
+
+function _fieldHtml(def, modelOptions, saved) {
+    const labelHtml = `<label class="form-label fw-semibold mb-1" style="font-size:.83rem;">
+        <span>${esc(def.label)}</span>
+        <code class="text-primary ms-1" style="font-size:.75rem; opacity:.7;">%${esc(def.key)}%</code>
+    </label>`;
+
+    const savedVal = saved[def.key] !== undefined ? saved[def.key] : (def.def !== undefined ? def.def : '');
+
+    let inputHtml;
+    if (def.key === 'model' && modelOptions) {
+        inputHtml = `<select class="form-select form-select-sm" data-ph="model">
+            <option value="">— 選擇模型 —</option>
+            ${modelOptions.map(m => `<option value="${esc(m)}" ${esc(m)===String(savedVal)?'selected':''}>${esc(m)}</option>`).join('')}
+        </select>`;
+    } else if (def.key === 'model') {
+        inputHtml = `<input type="text" class="form-control form-control-sm" data-ph="model"
+            placeholder="checkpoint.safetensors" value="${esc(savedVal)}">`;
+    } else if (def.type === 'textarea') {
+        inputHtml = `<textarea class="form-control form-control-sm" data-ph="${esc(def.key)}"
+            rows="${def.rows||3}" placeholder="${esc(def.hint||'')}">${esc(savedVal)}</textarea>`;
+    } else if (def.type === 'sampler') {
+        inputHtml = `<select class="form-select form-select-sm" data-ph="sampler_name">
+            <option value="">— 採樣器 —</option>
+            ${SAMPLER_LIST.map(s => `<option value="${s}" ${s===savedVal?'selected':''}>${s}</option>`).join('')}
+        </select>`;
+    } else if (def.type === 'sched') {
+        inputHtml = `<select class="form-select form-select-sm" data-ph="scheduler">
+            <option value="">— 調度器 —</option>
+            ${SCHEDULER_LIST.map(s => `<option value="${s}" ${s===savedVal?'selected':''}>${s}</option>`).join('')}
+        </select>`;
+    } else {
+        const attrs = [
+            `type="number"`, `class="form-control form-control-sm"`, `data-ph="${esc(def.key)}"`,
+            `placeholder="${esc(def.hint||'')}"`, `value="${savedVal !== '' ? savedVal : ''}"`,
+            def.min !== undefined ? `min="${def.min}"` : '',
+            def.max !== undefined ? `max="${def.max}"` : '',
+            def.step !== undefined ? `step="${def.step}"` : '',
+        ].filter(Boolean).join(' ');
+        inputHtml = `<input ${attrs}>`;
+    }
+
+    return `${labelHtml}${inputHtml}`;
+}
+
+function applyPreset(w, h) {
+    const wEl = document.querySelector('[data-ph="width"]');
+    const hEl = document.querySelector('[data-ph="height"]');
+    if (wEl) wEl.value = w;
+    if (hEl) hEl.value = h;
 }
 
 function collectPlaceholders() {
@@ -394,9 +531,10 @@ function collectPlaceholders() {
     document.querySelectorAll('#input-fields [data-ph]').forEach(el => {
         const key = el.dataset.ph;
         const val = el.value.trim();
-        if (val === '') return;   // leave unfilled placeholders as-is
-        result[key] = (el.type === 'number') ? Number(val) : val;
+        if (val === '') return;
+        result[key] = (el.tagName === 'SELECT' || el.type !== 'number') ? val : Number(val);
     });
+    _saveDefaults(result);
     return result;
 }
 
@@ -686,6 +824,251 @@ function esc(str) {
     const d = document.createElement('div');
     d.textContent = str ?? '';
     return d.innerHTML;
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Node Editor
+// ─────────────────────────────────────────────────────────────────────
+const NE_COLORS = {
+    CheckpointLoaderSimple:'#4a90d9', CheckpointLoader:'#4a90d9', UNETLoader:'#4a90d9',
+    VAELoader:'#4a90d9', LoraLoader:'#5b8dd9', CLIPLoader:'#4a90d9',
+    CLIPTextEncode:'#9b59b6', CLIPSetLastLayer:'#9b59b6',
+    ControlNetApply:'#8e44ad', ControlNetApplyAdvanced:'#8e44ad',
+    KSampler:'#27ae60', KSamplerAdvanced:'#27ae60', SamplerCustom:'#27ae60',
+    EmptyLatentImage:'#e67e22', EmptySD3LatentImage:'#e67e22',
+    VAEDecode:'#e67e22', VAEEncode:'#e67e22', LatentUpscale:'#e67e22',
+    ImageUpscaleWithModel:'#d35400', UpscaleModelLoader:'#d35400',
+    SaveImage:'#e74c3c', PreviewImage:'#e74c3c',
+};
+const NE_DEFAULT_COLOR = '#607d8b';
+const NE_PH_LIST = ['%seed%','%steps%','%cfg%','%sampler_name%','%scheduler%',
+    '%width%','%height%','%model%','%prompt%','%negative_prompt%','%denoise%'];
+
+let neState = { workflow: null, selectedId: null, dirty: {} };
+
+function openNodeEditor() {
+    if (!selected) return;
+    let wf;
+    try { wf = JSON.parse(selected.workflow_json); }
+    catch { alert('工作流 JSON 格式錯誤'); return; }
+    neState = { workflow: JSON.parse(JSON.stringify(wf)), selectedId: null, dirty: {} };
+    renderNEGraph();
+    renderNEPanel(null);
+    document.getElementById('ne-dirty-hint').style.display = 'none';
+    const el = document.getElementById('nodeEditorModal');
+    (bootstrap.Modal.getInstance(el) || new bootstrap.Modal(el)).show();
+}
+
+function neComputeColumns(nodeIds, edges) {
+    const level = Object.fromEntries(nodeIds.map(id => [id, 0]));
+    let changed = true;
+    while (changed) {
+        changed = false;
+        for (const e of edges) {
+            const nl = (level[e.from] ?? 0) + 1;
+            if (nl > (level[e.to] ?? 0)) { level[e.to] = nl; changed = true; }
+        }
+    }
+    const maxL = Math.max(0, ...Object.values(level));
+    const cols = [];
+    for (let l = 0; l <= maxL; l++) cols.push(nodeIds.filter(id => level[id] === l));
+    return cols;
+}
+
+function escSvg(s) {
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function renderNEGraph() {
+    const wf = neState.workflow;
+    const nodeIds = Object.keys(wf);
+    const COL_W = 188, NODE_H = 74, GAP_X = 30, GAP_Y = 12, PAD = 14;
+
+    const edges = [];
+    for (const id of nodeIds) {
+        for (const val of Object.values(wf[id].inputs || {})) {
+            if (Array.isArray(val) && val.length >= 2 && typeof val[0] === 'string' && wf[val[0]]) {
+                edges.push({ from: val[0], to: id });
+            }
+        }
+    }
+
+    const cols = neComputeColumns(nodeIds, edges);
+    const pos = {};
+    cols.forEach((col, ci) => col.forEach((id, ri) => {
+        pos[id] = { x: PAD + ci * (COL_W + GAP_X), y: PAD + ri * (NODE_H + GAP_Y) };
+    }));
+
+    const svgW = Math.max(400, PAD * 2 + cols.length * (COL_W + GAP_X) - GAP_X);
+    const svgH = Math.max(200, PAD * 2 + Math.max(1, ...cols.map(c => c.length)) * (NODE_H + GAP_Y) - GAP_Y);
+
+    let svg = `<svg width="${svgW}" height="${svgH}" xmlns="http://www.w3.org/2000/svg">`;
+    svg += `<defs><filter id="ne-sel" x="-15%" y="-15%" width="130%" height="130%">
+        <feDropShadow dx="0" dy="0" stdDeviation="3" flood-color="#4a90d9" flood-opacity=".6"/>
+    </filter></defs>`;
+
+    // Edges
+    const seenEdges = new Set();
+    for (const e of edges) {
+        const key = e.from + '→' + e.to;
+        if (seenEdges.has(key)) continue;
+        seenEdges.add(key);
+        const fp = pos[e.from], tp = pos[e.to];
+        if (!fp || !tp) continue;
+        const x1 = fp.x + COL_W, y1 = fp.y + NODE_H / 2;
+        const x2 = tp.x, y2 = tp.y + NODE_H / 2;
+        const cx = Math.abs(x2 - x1) * 0.5;
+        svg += `<path d="M${x1},${y1} C${x1+cx},${y1} ${x2-cx},${y2} ${x2},${y2}"
+            fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-opacity=".65"/>`;
+    }
+
+    // Nodes
+    for (const id of nodeIds) {
+        const p = pos[id];
+        if (!p) continue;
+        const nodeType = wf[id].class_type || 'Unknown';
+        const color = NE_COLORS[nodeType] || NE_DEFAULT_COLOR;
+        const isSel = id === neState.selectedId;
+        const hasDirty = Object.keys(neState.dirty[id] || {}).length > 0;
+        const shortType = nodeType.length > 24 ? nodeType.slice(0, 23) + '…' : nodeType;
+        const inputKeys = Object.keys(wf[id].inputs || {});
+        const staticInputs = inputKeys.filter(k => !Array.isArray(wf[id].inputs[k]));
+
+        svg += `<g class="ne-node" onclick="selectNENode('${escSvg(id)}')" style="cursor:pointer;">
+            <rect class="ne-rect" x="${p.x}" y="${p.y}" width="${COL_W}" height="${NODE_H}" rx="7"
+                fill="${color}" fill-opacity=".13"
+                stroke="${color}" stroke-width="${isSel ? 2.5 : 1.5}"
+                ${isSel ? 'filter="url(#ne-sel)"' : 'stroke-opacity=".8"'}/>
+            ${hasDirty ? `<circle cx="${p.x+COL_W-9}" cy="${p.y+9}" r="5" fill="#f59e0b"/>` : ''}
+            <text x="${p.x+10}" y="${p.y+19}" font-size="9.5" fill="${color}" font-weight="700"
+                font-family="ui-monospace,monospace">#${escSvg(id)}</text>
+            <text x="${p.x+10}" y="${p.y+37}" font-size="10.5" fill="currentColor">${escSvg(shortType)}</text>
+            <text x="${p.x+10}" y="${p.y+56}" font-size="8.5" fill="#94a3b8">
+                ${staticInputs.length} 個可編輯輸入 · ${inputKeys.length - staticInputs.length} 個連結
+            </text>
+        </g>`;
+    }
+
+    svg += '</svg>';
+    document.getElementById('ne-canvas').innerHTML = svg;
+}
+
+function selectNENode(id) {
+    neState.selectedId = id;
+    renderNEGraph();
+    renderNEPanel(id);
+}
+
+function renderNEPanel(id) {
+    const emptyEl  = document.getElementById('ne-panel-empty');
+    const detailEl = document.getElementById('ne-panel-detail');
+    if (!id) {
+        emptyEl.classList.remove('d-none');
+        detailEl.classList.add('d-none');
+        return;
+    }
+    emptyEl.classList.add('d-none');
+    detailEl.classList.remove('d-none');
+
+    const node = neState.workflow[id] || {};
+    const inputs = node.inputs || {};
+    const dirty  = neState.dirty[id] || {};
+
+    document.getElementById('ne-node-title').textContent = node.class_type || 'Unknown';
+    document.getElementById('ne-node-id').textContent = `節點 ID: ${id}`;
+
+    const listEl = document.getElementById('ne-inputs-list');
+    const entries = Object.entries(inputs);
+    if (!entries.length) {
+        listEl.innerHTML = '<div class="text-muted" style="font-size:.8rem;">此節點無輸入</div>';
+        return;
+    }
+
+    const phOpts = NE_PH_LIST.map(ph =>
+        `<li><a class="dropdown-item py-1" href="#"
+            onclick="neInsertPh('${id}','__KEY__','${ph}');return false;">${ph}</a></li>`
+    ).join('');
+
+    listEl.innerHTML = entries.map(([key, val]) => {
+        const isLink = Array.isArray(val) && typeof val[0] === 'string';
+        if (isLink) {
+            return `<div class="mb-2 d-flex align-items-center gap-1">
+                <small class="text-truncate fw-semibold" style="min-width:0;">${esc(key)}</small>
+                <span class="badge bg-secondary ms-auto text-nowrap" style="font-size:.62rem;">← 節點 ${val[0]}</span>
+            </div>`;
+        }
+        const cur = dirty[key] !== undefined ? dirty[key] : String(val ?? '');
+        const rowId = `ne-input-${id.replace(/\W/g,'_')}-${key.replace(/\W/g,'_')}`;
+        return `<div class="mb-2 pb-2 border-bottom">
+            <small class="fw-semibold d-block mb-1">${esc(key)}</small>
+            <div class="input-group input-group-sm">
+                <input id="${rowId}" type="text" class="form-control" style="font-size:.78rem;"
+                    value="${esc(cur)}"
+                    oninput="neUpdateInput('${id}','${key}',this.value)">
+                <div class="dropdown">
+                    <button class="btn btn-outline-secondary dropdown-toggle px-2" type="button"
+                        data-bs-toggle="dropdown" style="font-size:.72rem;" title="插入佔位符">
+                        <i class="bi bi-code-slash"></i>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end py-1" style="font-size:.8rem; min-width:130px;">
+                        ${phOpts.replace(/__KEY__/g, key)}
+                    </ul>
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function neUpdateInput(nodeId, key, value) {
+    if (!neState.dirty[nodeId]) neState.dirty[nodeId] = {};
+    neState.dirty[nodeId][key] = value;
+    document.getElementById('ne-dirty-hint').style.display = '';
+}
+
+function neInsertPh(nodeId, key, ph) {
+    if (!neState.dirty[nodeId]) neState.dirty[nodeId] = {};
+    neState.dirty[nodeId][key] = ph;
+    document.getElementById('ne-dirty-hint').style.display = '';
+    renderNEGraph();
+    renderNEPanel(nodeId);
+}
+
+async function saveNodeEdits() {
+    if (!selected) return;
+    const wf = JSON.parse(JSON.stringify(neState.workflow));
+    for (const [nodeId, changes] of Object.entries(neState.dirty)) {
+        if (!wf[nodeId]) continue;
+        wf[nodeId].inputs = wf[nodeId].inputs || {};
+        for (const [key, val] of Object.entries(changes)) {
+            if (val === '') continue;
+            const orig = wf[nodeId].inputs[key];
+            if (typeof orig === 'number' && !isNaN(Number(val)) && !/^%/.test(val)) {
+                wf[nodeId].inputs[key] = Number(val);
+            } else if (typeof orig === 'boolean') {
+                wf[nodeId].inputs[key] = val === 'true';
+            } else {
+                wf[nodeId].inputs[key] = val;
+            }
+        }
+    }
+    const newJson = JSON.stringify(wf);
+    try {
+        const resp = await apiFetch(`/api/comfy/workflows/${selected.id}`, 'PUT', {
+            name: selected.name,
+            description: selected.description,
+            workflow_json: newJson,
+        });
+        if (resp.error) { alert('保存失敗：' + resp.error); return; }
+        selected.workflow_json = newJson;
+        neState.workflow = wf;
+        neState.dirty = {};
+        document.getElementById('ne-dirty-hint').style.display = 'none';
+        renderNEGraph();
+        await renderInputFields();
+        bootstrap.Modal.getInstance(document.getElementById('nodeEditorModal'))?.hide();
+    } catch(e) {
+        alert('保存失敗：' + e.message);
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────

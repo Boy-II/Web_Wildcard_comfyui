@@ -35,12 +35,29 @@ def queue_prompt(workflow: dict) -> dict:
     """
     POST /prompt to ComfyUI.
     Returns the ComfyUI response dict (keys: prompt_id, number, node_errors).
-    Raises requests.HTTPError or requests.ConnectionError on failure.
+    Raises RuntimeError with ComfyUI's error body on 4xx/5xx, or
+    requests.ConnectionError when ComfyUI is unreachable.
     """
     client_id = str(uuid.uuid4())
     payload = {'prompt': workflow, 'client_id': client_id}
     r = requests.post(f'{get_comfyui_url()}/prompt', json=payload, timeout=_TIMEOUT_LONG)
-    r.raise_for_status()
+    if not r.ok:
+        try:
+            body = r.json()
+            # ComfyUI 400 body: {"error": {"type": ..., "message": ..., "details": ...}, "node_errors": {...}}
+            err_obj = body.get('error', body)
+            msg = err_obj.get('message') or err_obj.get('type') or str(body)
+            details = err_obj.get('details', '')
+            node_errors = body.get('node_errors', {})
+            full = msg
+            if details:
+                full += f': {details}'
+            if node_errors:
+                bad_nodes = ', '.join(f'{k}({v.get("class_type","?")})' for k, v in node_errors.items())
+                full += f' [節點錯誤: {bad_nodes}]'
+        except Exception:
+            full = r.text or f'HTTP {r.status_code}'
+        raise RuntimeError(f'ComfyUI 拒絕請求 ({r.status_code}): {full}')
     return r.json()
 
 

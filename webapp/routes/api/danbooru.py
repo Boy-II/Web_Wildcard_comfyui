@@ -200,6 +200,37 @@ def api_browse():
     return jsonify({'posts': posts, 'total': len(posts), 'page': page})
 
 
+@danbooru_bp.route('/translate-tags', methods=['POST'])
+def api_translate_tags():
+    """Batch-translate Danbooru tag names using the local Wildcard table.
+    Body: { tags: ["tag1", "tag2", ...] }
+    Returns: { "tag1": "中文翻譯", ... }  (only tags that have translations)
+
+    Danbooru uses underscores (long_hair); the wildcard DB uses spaces (long hair).
+    We normalise the lookup automatically so both formats match.
+    """
+    data = request.json or {}
+    tags = data.get('tags', [])
+    if not tags:
+        return jsonify({})
+
+    # Build normalised→original map: "long hair" -> "long_hair"
+    norm_to_orig = {t.replace('_', ' '): t for t in tags}
+    search_terms = list(norm_to_orig.keys())
+
+    rows = (
+        db.session.query(Wildcard.content, Wildcard.content_zh)
+        .filter(
+            Wildcard.content.in_(search_terms),
+            Wildcard.content_zh.isnot(None),
+            Wildcard.content_zh != '',
+        )
+        .all()
+    )
+    # Return keyed by the original Danbooru tag name (with underscores)
+    return jsonify({norm_to_orig.get(content, content): zh for content, zh in rows})
+
+
 @danbooru_bp.route('/import-tags', methods=['POST'])
 def api_import_tags():
     """Import selected Danbooru tags into a local category."""
