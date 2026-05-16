@@ -63,7 +63,7 @@ python auto_categorizer.py    # Auto-classify wildcards (169+ rules)
 | `import_export_bp` | `/api` | TXT/ZIP import; TXT/JSON/CSV export |
 | `settings_bp` | `/api` | App settings, translation settings |
 | `profiles_bp` | `/api/translation-profiles` | Named translation profiles |
-| `danbooru_bp` | `/api/danbooru` | Danbooru tag lookup/sync |
+| `danbooru_bp` | `/api/danbooru` | Danbooru tag lookup/sync; `POST /translate-tags` for batch Chinese lookup |
 | `assistant_bp` | `/api/assistant` | AI chat assistant (action tags) |
 | `comfy_bp` | registered in comfy_sync | ComfyUI file sync (wildcard txt sync) |
 | `comfy_api_bp` | `/api/comfy` | ComfyUI API workflow execution |
@@ -72,7 +72,7 @@ Frontend is server-rendered Jinja2 templates (`webapp/templates/`) using Bootstr
 
 ### Data models (`webapp/models.py`)
 - **`Category`** — self-referencing tree (`parent_id → id`). `name` is the machine-safe slug (alphanumeric + `_`); `display_name` is human-readable. `level` is computed (0 = root). Unique constraint: `(parent_id, name)`.
-- **`Wildcard`** — belongs to one `Category`. `content` is the English tag; `content_zh` is the translated Chinese. `translation_status` ∈ `{pending, translated, failed}`. `danbooru_status` ∈ `{valid, deprecated, not_found}`. Unique constraint: `(category_id, content)`.
+- **`Wildcard`** — belongs to one `Category`. `content` is the English tag; `content_zh` is the translated Chinese. `translation_status` ∈ `{pending, translated, failed}`. `danbooru_status` ∈ `{valid, deprecated, not_found}`. Unique constraint: `(category_id, content)`. `POST /api/wildcards` returns 409 on duplicate.
 - **`TranslationSetting`** — one row per provider (`ollama`, `gemini`, `openai`). Only one row has `is_active=True` at a time.
 - **`TranslationProfile`** — named, reusable translation configurations (used by the assistant).
 - **`ComfyWorkflow`** — stores ComfyUI API-format workflow JSON with name/description.
@@ -121,8 +121,16 @@ The sync logic lives in `webapp/routes/api/comfy_sync.py` and `category_service.
    - `_INT_PLACEHOLDERS = {seed, steps, width, height}` → replaced as bare JSON integers
    - `_FLOAT_PLACEHOLDERS = {cfg, denoise}` → replaced as bare JSON floats
    - `seed = -1` is resolved to a random uint32 before substitution
+   - Any unreplaced `"%key%"` INT/FLOAT tokens are auto-filled with safe defaults (prevents ComfyUI 400 "invalid literal" errors)
+   - On ComfyUI 4xx, the full error body including `node_errors` is extracted and surfaced to the frontend
 4. Frontend polls `GET /api/comfy/jobs/<id>/status` every 3 s; backend checks `/history/<prompt_id>`
 5. On completion, images are proxied through `GET /api/comfy/jobs/<id>/image?filename=...`
+6. Parameter defaults (sampler, scheduler, steps, seed, cfg, size presets) are persisted in `localStorage` under key `comfy_ph_{workflow_id}` — shared between the workflow page and prompt builder page
+
+### Danbooru integration
+- `GET /api/danbooru/browse` — proxies `danbooru.donmai.us/posts.json` (auth from AppSetting `danbooru_login` / `danbooru_api_key`)
+- `POST /api/danbooru/translate-tags` — batch lookup Chinese translations from local Wildcard table; normalises Danbooru underscores to spaces (`long_hair` → `long hair`) for matching
+- Prompt builder Danbooru tab: click image → tag chips appear; click chip = insert into prompt; hover `+` = add tag to Wildcard DB (defaults to category named `other`, `未分類`, or `未整理`)
 
 ### ComfyUI wildcard sync (two approaches)
 - **Local**: flat `.txt` files in `COMFYUI_WILDCARD_PATH`; category hierarchy encoded with `__` separator
